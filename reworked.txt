@@ -431,11 +431,7 @@ local speedhackEnabled = false
 local speedValue = 50
 local speedConnection
 
-UserInputService.InputBegan:Connect(function(input, processed)
-    if not processed and input.KeyCode == Enum.KeyCode.LeftControl then
-        speedhackEnabled = not speedhackEnabled
-    end
-end)
+
 
 safeCall(function()
     local playerChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
@@ -756,12 +752,12 @@ CombatTab:Slider({
 
 MovementTab:Toggle({
     Title = "Speedhack",
-    Desc = "Run fast (Press Left Ctrl to toggle)",
+    Desc = "Click the draggable button to toggle",
     Default = false,
     Callback = function(enabled)
-        speedhackEnabled = enabled
         speedButton.Visible = enabled
         if not enabled then
+            speedhackEnabled = false
             speedButton.BackgroundColor3 = Color3.fromRGB(150, 80, 80)
         end
     end
