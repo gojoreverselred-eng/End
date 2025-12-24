@@ -3,19 +3,19 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoBlockStart = 0.1,
     AutoBlockEnd = 0.3,
     AutoBlockRange = 20,
-    AutoLearn = false,
+    AutoBlockDash = false,
+    AutoBlockDashStart = 0.05,
+    AutoBlockDashEnd = 0.25,
     AutoPunish = false,
     AutoPunishRange = 20,
-    AutoPunishDelay = 0.1,
-    AutoPunishAttackDelay = 0.05,
+    AutoPunishDelay = 1,
+    AutoPunishHits = 4,
+    AutoPunishHitDelay = 0.05,
     AntiM1 = false,
     AntiM1Range = 20,
     LookAt = false,
     LookAtSmoothness = 0.15,
-    Invisibility = false,
-    ShowOrbit = false,
-    OrbitTransparency = 0.7,
-    OrbitColor = Color3.fromRGB(0, 255, 0)
+    Invisibility = false
 }
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -128,8 +128,7 @@ local v190 = v186:WaitForChild("Animations"):WaitForChild("Attacks")
 local vu199 = {}
 local vu200 = false
 local vu470 = {}
-local vu501 = {}
-local vu502 = {}
+local vu490 = {}
 
 for _, folder in ipairs(v190:GetChildren()) do
     if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" then
@@ -141,172 +140,26 @@ for _, folder in ipairs(v190:GetChildren()) do
     end
 end
 
+for _, folder in ipairs(v190:GetChildren()) do
+    if folder:IsA("Folder") then
+        for _, subfolder in ipairs(folder:GetChildren()) do
+            if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" then
+                for _, anim in ipairs(subfolder:GetDescendants()) do
+                    if anim:IsA("Animation") then
+                        vu490[anim.AnimationId] = true
+                    end
+                end
+            end
+        end
+    end
+end
+
 local v191 = v190:WaitForChild("Global"):WaitForChild("M1")
 for _, v204 in ipairs(v191:GetDescendants()) do
     if v204:IsA("Animation") then
         vu199[v204.AnimationId] = true
     end
 end
-
-for _, folder in ipairs(v190:GetChildren()) do
-    if folder:IsA("Folder") then
-        local hitAnim = folder:FindFirstChild("Hit")
-        local loopAnim = folder:FindFirstChild("Loop")
-        
-        if hitAnim and hitAnim:IsA("Animation") then
-            local parentName = folder.Name
-            if parentName ~= "Back" and parentName ~= "Left" and parentName ~= "Right" and parentName ~= "Finisher" then
-                vu501[hitAnim.AnimationId] = true
-            end
-        end
-        
-        if loopAnim and loopAnim:IsA("Animation") then
-            local parentName = folder.Name
-            if parentName ~= "Back" and parentName ~= "Left" and parentName ~= "Right" and parentName ~= "Finisher" then
-                vu501[loopAnim.AnimationId] = true
-            end
-        end
-    end
-end
-
-local function vu505(p506)
-    if not vu502[p506] then
-        vu502[p506] = {
-            attacks = 0,
-            successfulBlocks = 0,
-            missedBlocks = 0,
-            avgDelay = 0,
-            lastAttack = 0,
-            delays = {},
-            patterns = {},
-            confidence = 0
-        }
-    end
-    return vu502[p506]
-end
-
-local function vu507(p508, p515)
-    local data = vu505(p508)
-    data.attacks = data.attacks + 1
-    
-    if p515 then
-        data.successfulBlocks = data.successfulBlocks + 1
-    else
-        data.missedBlocks = data.missedBlocks + 1
-    end
-    
-    local totalAttempts = data.successfulBlocks + data.missedBlocks
-    if totalAttempts > 0 then
-        data.confidence = data.successfulBlocks / totalAttempts
-    end
-    
-    local currentTime = tick()
-    if data.lastAttack > 0 then
-        local delay = currentTime - data.lastAttack
-        table.insert(data.delays, delay)
-        if #data.delays > 20 then
-            table.remove(data.delays, 1)
-        end
-        
-        local sum = 0
-        for _, d in ipairs(data.delays) do
-            sum = sum + d
-        end
-        data.avgDelay = sum / #data.delays
-        
-        table.insert(data.patterns, {time = currentTime, delay = delay})
-        if #data.patterns > 30 then
-            table.remove(data.patterns, 1)
-        end
-    end
-    data.lastAttack = currentTime
-end
-
-local function vu509(p510)
-    if not cfg.AutoLearn then
-        return 0, 0
-    end
-    local data = vu502[p510]
-    if not data or data.attacks < 1 then
-        return 0, 0
-    end
-    
-    local predictionBonus = 0
-    local blockExtension = 0
-    
-    if data.confidence > 0.7 then
-        predictionBonus = math.min(data.confidence * 0.15, 0.15)
-    elseif data.confidence > 0.5 then
-        predictionBonus = math.min(data.confidence * 0.08, 0.08)
-    end
-    
-    if data.avgDelay > 0 and data.avgDelay < 0.5 then
-        predictionBonus = predictionBonus + 0.02
-    end
-    
-    if data.attacks > 15 and data.confidence > 0.6 then
-        blockExtension = 0.05
-    end
-    
-    return predictionBonus, blockExtension
-end
-
-local vu511 = nil
-local vu512 = nil
-
-local function vu513()
-    if vu511 then
-        vu511:Destroy()
-        vu511 = nil
-    end
-    if vu512 then
-        vu512:Destroy()
-        vu512 = nil
-    end
-end
-
-local function vu514()
-    vu513()
-    if not cfg.ShowOrbit then
-        return
-    end
-    
-    local char = vu188.Character
-    if not char then
-        return
-    end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then
-        return
-    end
-    
-    vu511 = Instance.new("Part")
-    vu511.Name = "OrbitVisualizer"
-    vu511.Shape = Enum.PartType.Ball
-    vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
-    vu511.Anchored = true
-    vu511.CanCollide = false
-    vu511.Transparency = cfg.OrbitTransparency
-    vu511.Color = cfg.OrbitColor
-    vu511.Material = Enum.Material.ForceField
-    vu511.CFrame = hrp.CFrame
-    vu511.Parent = workspace
-    
-    vu512 = Instance.new("SelectionSphere")
-    vu512.Color3 = cfg.OrbitColor
-    vu512.SurfaceColor3 = cfg.OrbitColor
-    vu512.SurfaceTransparency = cfg.OrbitTransparency
-    vu512.Transparency = cfg.OrbitTransparency
-    vu512.Adornee = vu511
-    vu512.Parent = vu511
-end
-
-vu188.CharacterAdded:Connect(function()
-    task.wait(1)
-    if cfg.ShowOrbit then
-        vu514()
-    end
-end)
 
 local function vu205()
     if vu200 then
@@ -336,8 +189,42 @@ local function vu227()
                     local v218 = v215:FindFirstChildOfClass("Humanoid")
                     if v218 then
                         for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            local animId = v222.Animation.AnimationId
-                            if vu199[animId] or vu501[animId] then
+                            if vu199[v222.Animation.AnimationId] then
+                                v213 = v214
+                                v208 = v217
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return v213
+end
+
+local function vu491()
+    local v206 = vu188.Character
+    if not v206 then
+        return nil
+    end
+    local v207 = v206:FindFirstChild("HumanoidRootPart")
+    if not v207 then
+        return nil
+    end
+    local v208 = cfg.AutoBlockRange
+    local v213 = nil
+    for _, v214 in ipairs(vu9:GetPlayers()) do
+        if v214 ~= vu188 then
+            local v215 = v214.Character
+            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
+            if v216 then
+                local v217 = (v207.Position - v216.Position).Magnitude
+                if v217 < v208 then
+                    local v218 = v215:FindFirstChildOfClass("Humanoid")
+                    if v218 then
+                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
+                            if vu490[v222.Animation.AnimationId] then
                                 v213 = v214
                                 v208 = v217
                                 break
@@ -422,30 +309,45 @@ local function vu474()
 end
 
 local vu472 = false
+local vu475 = nil
+local vu492 = false
 
 v185.Heartbeat:Connect(function()
     if cfg.AutoBlock then
         local v229 = vu227()
         if v229 and not vu200 then
             vu200 = true
-            local ping = vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
-            local learnBonus, blockExtend = vu509(v229.UserId)
-            local v230 = cfg.AutoBlockStart + (ping / 3) - learnBonus
-            local blockDuration = cfg.AutoBlockEnd + blockExtend
-            
+            local v230 = cfg.AutoBlockStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
             task.delay(v230, function()
                 if vu200 then
                     vu189:FireServer("Block", true)
-                    local blockSuccess = true
-                    task.delay(blockDuration, function()
+                    task.delay(cfg.AutoBlockEnd, function()
                         if vu200 then
                             vu189:FireServer("Block", false)
-                            vu507(v229.UserId, blockSuccess)
                             vu200 = false
                         end
                     end)
                 end
             end)
+        end
+        
+        if cfg.AutoBlockDash then
+            local v493 = vu491()
+            if v493 and not vu492 then
+                vu492 = true
+                local v494 = cfg.AutoBlockDashStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
+                task.delay(v494, function()
+                    if vu492 then
+                        vu189:FireServer("Block", true)
+                        task.delay(cfg.AutoBlockDashEnd, function()
+                            if vu492 then
+                                vu189:FireServer("Block", false)
+                                vu492 = false
+                            end
+                        end)
+                    end
+                end)
+            end
         end
     else
         vu205()
@@ -457,16 +359,13 @@ v185.Heartbeat:Connect(function()
             vu472 = true
             task.spawn(function()
                 vu189:FireServer("Block", true)
-                task.wait(cfg.AutoPunishDelay)
-                vu189:FireServer("M1", true)
-                task.wait(cfg.AutoPunishAttackDelay)
-                vu189:FireServer("M1", true)
-                task.wait(cfg.AutoPunishAttackDelay)
-                vu189:FireServer("M1", true)
-                task.wait(cfg.AutoPunishAttackDelay)
-                vu189:FireServer("M1", true)
-                task.wait(cfg.AutoPunishAttackDelay)
+                task.wait(0.1)
+                for i = 1, cfg.AutoPunishHits do
+                    vu189:FireServer("M1", true)
+                    task.wait(cfg.AutoPunishHitDelay)
+                end
                 vu189:FireServer("M1", false)
+                task.wait(cfg.AutoPunishDelay)
                 vu472 = false
             end)
         end
@@ -481,42 +380,13 @@ v185.Heartbeat:Connect(function()
                 v478 = v478:FindFirstChild("HumanoidRootPart")
             end
             if v477 and v478 then
-                local targetPos = v477.Position
-                local playerPos = v478.Position
-                local direction = (targetPos - playerPos) * Vector3.new(1, 0, 1)
-                if direction.Magnitude > 0.1 then
-                    local targetCFrame = CFrame.new(playerPos) * CFrame.Angles(0, math.atan2(direction.X, direction.Z), 0)
-                    v478.CFrame = v478.CFrame:Lerp(targetCFrame, cfg.LookAtSmoothness)
-                end
+                local v479 = v477.Position
+                local v480 = v478.Position
+                local v481 = Vector3.new(v479.X, v480.Y, v479.Z)
+                local v482 = CFrame.new(v480, v481)
+                v478.CFrame = CFrame.new(v478.Position) * CFrame.Angles(0, math.atan2(v481.X - v480.X, v481.Z - v480.Z), 0):Lerp(v482, cfg.LookAtSmoothness)
             end
         end
-    end
-    
-    if cfg.ShowOrbit then
-        if vu511 and vu511.Parent then
-            local char = vu188.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    vu511.CFrame = hrp.CFrame
-                    vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
-                    vu511.Color = cfg.OrbitColor
-                    vu511.Transparency = cfg.OrbitTransparency
-                    if vu512 then
-                        vu512.Color3 = cfg.OrbitColor
-                        vu512.SurfaceColor3 = cfg.OrbitColor
-                        vu512.SurfaceTransparency = cfg.OrbitTransparency
-                        vu512.Transparency = cfg.OrbitTransparency
-                    end
-                end
-            end
-        else
-            if cfg.ShowOrbit then
-                vu514()
-            end
-        end
-    else
-        vu513()
     end
 end)
 
