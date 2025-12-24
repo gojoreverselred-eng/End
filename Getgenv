@@ -355,11 +355,10 @@ v185.Heartbeat:Connect(function()
     
     if cfg.AutoPunish then
         local v473 = vu471()
-        if v473 and not vu472 then
+        if v473 and not vu472 and not vu200 and not vu492 then
             vu472 = true
             task.spawn(function()
-                vu189:FireServer("Block", true)
-                task.wait(0.1)
+                task.wait(cfg.AutoBlockEnd + 0.05)
                 for i = 1, cfg.AutoPunishHits do
                     vu189:FireServer("M1", true)
                     task.wait(cfg.AutoPunishHitDelay)
@@ -370,7 +369,9 @@ v185.Heartbeat:Connect(function()
             end)
         end
     end
-    
+end)
+
+v185.RenderStepped:Connect(function()
     if cfg.LookAt then
         local v476 = vu227()
         if v476 and v476.Character then
@@ -380,11 +381,11 @@ v185.Heartbeat:Connect(function()
                 v478 = v478:FindFirstChild("HumanoidRootPart")
             end
             if v477 and v478 then
-                local v479 = v477.Position
-                local v480 = v478.Position
-                local v481 = Vector3.new(v479.X, v480.Y, v479.Z)
-                local v482 = CFrame.new(v480, v481)
-                v478.CFrame = CFrame.new(v478.Position) * CFrame.Angles(0, math.atan2(v481.X - v480.X, v481.Z - v480.Z), 0):Lerp(v482, cfg.LookAtSmoothness)
+                local targetPos = v477.Position
+                local currentPos = v478.Position
+                local lookPos = Vector3.new(targetPos.X, currentPos.Y, targetPos.Z)
+                local targetCFrame = CFrame.new(currentPos, lookPos)
+                v478.CFrame = v478.CFrame:Lerp(targetCFrame, cfg.LookAtSmoothness)
             end
         end
     end
