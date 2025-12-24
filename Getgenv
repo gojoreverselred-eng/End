@@ -3,13 +3,21 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoBlockStart = 0.1,
     AutoBlockEnd = 0.3,
     AutoBlockRange = 20,
+    AutoLearn = false,
     AutoPunish = false,
     AutoPunishRange = 20,
+    AutoPunishDelay = 0.1,
+    AutoPunishAttackDelay = 0.05,
+    AutoPunishAttacks = 4,
+    AutoPunishCooldown = 1,
     AntiM1 = false,
     AntiM1Range = 20,
     LookAt = false,
     LookAtSmoothness = 0.15,
-    Invisibility = false
+    Invisibility = false,
+    ShowOrbit = false,
+    OrbitTransparency = 0.7,
+    OrbitColor = Color3.fromRGB(0, 255, 0)
 }
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -122,6 +130,10 @@ local v190 = v186:WaitForChild("Animations"):WaitForChild("Attacks")
 local vu199 = {}
 local vu200 = false
 local vu470 = {}
+local vu501 = {}
+local vu502 = {}
+local vu503 = 0
+local vu504 = {}
 
 for _, folder in ipairs(v190:GetChildren()) do
     if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" then
@@ -139,6 +151,155 @@ for _, v204 in ipairs(v191:GetDescendants()) do
         vu199[v204.AnimationId] = true
     end
 end
+
+for _, folder in ipairs(v190:GetChildren()) do
+    if folder:IsA("Folder") then
+        local hitAnim = folder:FindFirstChild("Hit")
+        local loopAnim = folder:FindFirstChild("Loop")
+        
+        if hitAnim and hitAnim:IsA("Animation") then
+            local parentName = folder.Name
+            if parentName ~= "Back" and parentName ~= "Left" and parentName ~= "Right" and parentName ~= "Finisher" then
+                vu501[hitAnim.AnimationId] = true
+            end
+        end
+        
+        if loopAnim and loopAnim:IsA("Animation") then
+            local parentName = folder.Name
+            if parentName ~= "Back" and parentName ~= "Left" and parentName ~= "Right" and parentName ~= "Finisher" then
+                vu501[loopAnim.AnimationId] = true
+            end
+        end
+    end
+end
+
+local function vu505(p506)
+    if not vu502[p506] then
+        vu502[p506] = {
+            attacks = 0,
+            blocks = 0,
+            avgDelay = 0.15,
+            lastAttack = 0,
+            delays = {}
+        }
+    end
+    return vu502[p506]
+end
+
+local function vu507(p508)
+    local data = vu505(p508)
+    data.attacks = data.attacks + 1
+    local currentTime = tick()
+    if data.lastAttack > 0 then
+        local delay = currentTime - data.lastAttack
+        table.insert(data.delays, delay)
+        if #data.delays > 10 then
+            table.remove(data.delays, 1)
+        end
+        local sum = 0
+        for _, d in ipairs(data.delays) do
+            sum = sum + d
+        end
+        data.avgDelay = sum / #data.delays
+    end
+    data.lastAttack = currentTime
+end
+
+local function vu509(p510)
+    if not cfg.AutoLearn then
+        return 0
+    end
+    local data = vu502[p510]
+    if not data then
+        return 0
+    end
+    local learningBonus = math.min(data.attacks * 0.005, 0.1)
+    return learningBonus
+end
+
+local vu511 = nil
+local vu512 = nil
+
+local function vu513()
+    if vu511 then
+        vu511:Destroy()
+        vu511 = nil
+    end
+    if vu512 then
+        vu512:Destroy()
+        vu512 = nil
+    end
+end
+
+local function vu514()
+    vu513()
+    if not cfg.ShowOrbit then
+        return
+    end
+    
+    local char = vu188.Character
+    if not char then
+        return
+    end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        return
+    end
+    
+    vu511 = Instance.new("Part")
+    vu511.Name = "OrbitVisualizer"
+    vu511.Shape = Enum.PartType.Ball
+    vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
+    vu511.Anchored = true
+    vu511.CanCollide = false
+    vu511.Transparency = cfg.OrbitTransparency
+    vu511.Color = cfg.OrbitColor
+    vu511.Material = Enum.Material.ForceField
+    vu511.CFrame = hrp.CFrame
+    vu511.Parent = workspace
+    
+    vu512 = Instance.new("SelectionSphere")
+    vu512.Color3 = cfg.OrbitColor
+    vu512.SurfaceColor3 = cfg.OrbitColor
+    vu512.SurfaceTransparency = cfg.OrbitTransparency
+    vu512.Transparency = cfg.OrbitTransparency
+    vu512.Adornee = vu511
+    vu512.Parent = vu511
+end
+
+vu188.CharacterAdded:Connect(function()
+    task.wait(1)
+    vu514()
+end)
+
+task.spawn(function()
+    while task.wait(0.1) do
+        if cfg.ShowOrbit then
+            local char = vu188.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    if not vu511 or not vu511.Parent then
+                        vu514()
+                    else
+                        vu511.CFrame = hrp.CFrame
+                        vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
+                        vu511.Color = cfg.OrbitColor
+                        vu511.Transparency = cfg.OrbitTransparency
+                        if vu512 then
+                            vu512.Color3 = cfg.OrbitColor
+                            vu512.SurfaceColor3 = cfg.OrbitColor
+                            vu512.SurfaceTransparency = cfg.OrbitTransparency
+                            vu512.Transparency = cfg.OrbitTransparency
+                        end
+                    end
+                end
+            end
+        else
+            vu513()
+        end
+    end
+end)
 
 local function vu205()
     if vu200 then
@@ -168,7 +329,9 @@ local function vu227()
                     local v218 = v215:FindFirstChildOfClass("Humanoid")
                     if v218 then
                         for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            if vu199[v222.Animation.AnimationId] then
+                            local animId = v222.Animation.AnimationId
+                            if vu199[animId] or vu501[animId] then
+                                vu507(v214.UserId)
                                 v213 = v214
                                 v208 = v217
                                 break
@@ -260,7 +423,9 @@ v185.Heartbeat:Connect(function()
         local v229 = vu227()
         if v229 and not vu200 then
             vu200 = true
-            local v230 = cfg.AutoBlockStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
+            local ping = vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
+            local learnBonus = vu509(v229.UserId)
+            local v230 = cfg.AutoBlockStart + (ping / 3) - learnBonus
             task.delay(v230, function()
                 if vu200 then
                     vu189:FireServer("Block", true)
@@ -283,13 +448,13 @@ v185.Heartbeat:Connect(function()
             vu472 = true
             task.spawn(function()
                 vu189:FireServer("Block", true)
-                task.wait(0.1)
-                for i = 1, 4 do
+                task.wait(cfg.AutoPunishDelay)
+                for i = 1, cfg.AutoPunishAttacks do
                     vu189:FireServer("M1", true)
-                    task.wait(0.05)
+                    task.wait(cfg.AutoPunishAttackDelay)
                 end
                 vu189:FireServer("M1", false)
-                task.wait(1)
+                task.wait(cfg.AutoPunishCooldown)
                 vu472 = false
             end)
         end
@@ -304,11 +469,13 @@ v185.Heartbeat:Connect(function()
                 v478 = v478:FindFirstChild("HumanoidRootPart")
             end
             if v477 and v478 then
-                local v479 = v477.Position
-                local v480 = v478.Position
-                local v481 = Vector3.new(v479.X, v480.Y, v479.Z)
-                local v482 = CFrame.new(v480, v481)
-                v478.CFrame = v478.CFrame:Lerp(v482, cfg.LookAtSmoothness)
+                local targetPos = v477.Position
+                local playerPos = v478.Position
+                local direction = (targetPos - playerPos) * Vector3.new(1, 0, 1)
+                if direction.Magnitude > 0.1 then
+                    local targetCFrame = CFrame.new(playerPos) * CFrame.Angles(0, math.atan2(direction.X, direction.Z), 0)
+                    v478.CFrame = v478.CFrame:Lerp(targetCFrame, cfg.LookAtSmoothness)
+                end
             end
         end
     end
