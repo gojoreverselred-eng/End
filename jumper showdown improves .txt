@@ -1,0 +1,527 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TeleportService = game:GetService("TeleportService")
+local Stats = game:GetService("Stats")
+
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+
+local connections = {}
+local state = {
+    noDashCooldown = false,
+    noWallRunCooldown = false,
+    wallComboAnywhere = false,
+    autoVoidKill = false,
+    noKnockback = false,
+    autoCharaTiming = false,
+    antiM1 = false,
+    antiRagdoll = false,
+    lockOnEnabled = false,
+    lockOnSmoothness = 0.15,
+    autoPerfectBlock = false,
+    blockDelay = 0.1,
+    blockRange = 20,
+    blockHoldTime = 0.5,
+    blockEndDelay = 0.2,
+    invisibility = false,
+    glue = false,
+    glueTarget = "",
+    fastKill = false,
+    glueToChara = false,
+    autoFarmChara = false,
+    speedhack = false,
+    speedValue = 50,
+    noclip = false,
+    esp = false
+}
+
+local function safeCall(fn, ...)
+    local success, result = pcall(fn, ...)
+    if not success then
+        return nil
+    end
+    return result
+end
+
+local function addConnection(name, connection)
+    if connections[name] then
+        connections[name]:Disconnect()
+    end
+    connections[name] = connection
+end
+
+local function cleanupConnections()
+    for _, conn in pairs(connections) do
+        if conn and conn.Connected then
+            conn:Disconnect()
+        end
+    end
+    connections = {}
+end
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+    Character = char
+    HumanoidRootPart = char:WaitForChild("HumanoidRootPart")
+    task.wait(0.5)
+    cleanupConnections()
+    setupAllFeatures()
+end)
+
+local function setupNoDashCooldown()
+    safeCall(function()
+        local Combat = require(ReplicatedStorage.Modules.Player.Character.Combat)
+        setreadonly(Combat, false)
+        if not Combat._OriginalAddCooldown then
+            Combat._OriginalAddCooldown = Combat.AddCooldown
+        end
+        if state.noDashCooldown then
+            Combat.AddCooldown = function() end
+        else
+            Combat.AddCooldown = Combat._OriginalAddCooldown
+        end
+    end)
+end
+
+local function setupNoWallRunCooldown()
+    safeCall(function()
+        local WallRun = require(ReplicatedStorage.Modules.Player.Character.Combat.ClientHandlers.WallRun)
+        setreadonly(WallRun, false)
+        if not WallRun._OriginalCanActivate then
+            WallRun._OriginalCanActivate = WallRun.CanActivate
+        end
+        if state.noWallRunCooldown then
+            WallRun.CanActivate = function() return true end
+        else
+            WallRun.CanActivate = WallRun._OriginalCanActivate
+        end
+    end)
+end
+
+local function setupNoKnockback()
+    safeCall(function()
+        local Combat = require(ReplicatedStorage.Modules.Player.Character.Combat)
+        setreadonly(Combat, false)
+        if not Combat._OriginalVelocity then
+            Combat._OriginalVelocity = Combat.Velocity
+        end
+        if state.noKnockback then
+            Combat.Velocity = function() end
+        else
+            Combat.Velocity = Combat._OriginalVelocity
+        end
+    end)
+end
+
+local function setupAntiRagdoll()
+    safeCall(function()
+        local Combat = require(ReplicatedStorage.Modules.Player.Character.Combat)
+        setreadonly(Combat, false)
+        if not Combat._OriginalToggleRagdollStates then
+            Combat._OriginalToggleRagdollStates = Combat.ToggleRagdollStates
+        end
+        if state.antiRagdoll then
+            Combat.ToggleRagdollStates = function() end
+        else
+            Combat.ToggleRagdollStates = Combat._OriginalToggleRagdollStates
+        end
+    end)
+end
+
+local function getAttackAnimations()
+    local anims = {}
+    safeCall(function()
+        local attacksFolder = ReplicatedStorage.Animations.Attacks
+        for _, folder in ipairs(attacksFolder:GetDescendants()) do
+            if folder:IsA("Animation") then
+                local animId = tonumber(folder.AnimationId:match("%d+"))
+                if animId then
+                    anims[animId] = true
+                end
+            end
+        end
+    end)
+    return anims
+end
+
+local function isPlayerAttacking(player)
+    if not player.Character then return false end
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return false end
+    
+    local attackAnims = getAttackAnimations()
+    for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+        local animId = tonumber(track.Animation.AnimationId:match("%d+"))
+        if animId and attackAnims[animId] then
+            return true
+        end
+    end
+    return false
+end
+
+local blockState = {
+    isBlocking = false,
+    blockStartTime = 0
+}
+
+local function setupAutoPerfectBlock()
+    addConnection("AutoBlock", RunService.Heartbeat:Connect(function()
+        if not state.autoPerfectBlock then 
+            if blockState.isBlocking then
+                safeCall(function()
+                    LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", false)
+                    blockState.isBlocking = false
+                end)
+            end
+            return 
+        end
+        
+        local currentTime = tick()
+        
+        if blockState.isBlocking and (currentTime - blockState.blockStartTime) >= state.blockHoldTime then
+            task.delay(state.blockEndDelay, function()
+                if blockState.isBlocking then
+                    safeCall(function()
+                        LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", false)
+                        blockState.isBlocking = false
+                    end)
+                end
+            end)
+            return
+        end
+        
+        if not Character or not HumanoidRootPart then return end
+        
+        local nearestAttacker = nil
+        local nearestDistance = state.blockRange
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local theirHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                if theirHRP then
+                    local distance = (HumanoidRootPart.Position - theirHRP.Position).Magnitude
+                    if distance < nearestDistance and isPlayerAttacking(player) then
+                        nearestAttacker = player
+                        nearestDistance = distance
+                    end
+                end
+            end
+        end
+        
+        if nearestAttacker and not blockState.isBlocking then
+            blockState.isBlocking = true
+            blockState.blockStartTime = currentTime
+            
+            local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
+            task.delay(state.blockDelay + ping, function()
+                if blockState.isBlocking then
+                    safeCall(function()
+                        LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", true)
+                    end)
+                end
+            end)
+        elseif not nearestAttacker and blockState.isBlocking then
+            safeCall(function()
+                LocalPlayer.Remotes.Combat.AttackInput:FireServer("Block", false)
+                blockState.isBlocking = false
+            end)
+        end
+    end))
+end
+
+local function setupLockOn()
+    local lockedTarget = nil
+    
+    local function findNearestPlayer()
+        if not Character or not HumanoidRootPart then return nil end
+        
+        local nearest = nil
+        local nearestDist = math.huge
+        
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local theirHRP = player.Character:FindFirstChild("HumanoidRootPart")
+                if theirHRP then
+                    local dist = (HumanoidRootPart.Position - theirHRP.Position).Magnitude
+                    if dist < nearestDist then
+                        nearest = player
+                        nearestDist = dist
+                    end
+                end
+            end
+        end
+        return nearest
+    end
+    
+    addConnection("LockOn", RunService.RenderStepped:Connect(function()
+        if not state.lockOnEnabled then
+            lockedTarget = nil
+            if Character then
+                local humanoid = Character:FindFirstChildOfClass("Humanoid")
+                if humanoid then humanoid.AutoRotate = true end
+            end
+            return
+        end
+        
+        if not lockedTarget then
+            lockedTarget = findNearestPlayer()
+        end
+        
+        if lockedTarget and Character and HumanoidRootPart then
+            local humanoid = Character:FindFirstChildOfClass("Humanoid")
+            if humanoid and lockedTarget.Character then
+                local targetHRP = lockedTarget.Character:FindFirstChild("HumanoidRootPart")
+                if targetHRP then
+                    humanoid.AutoRotate = false
+                    local targetPos = targetHRP.Position
+                    local myPos = HumanoidRootPart.Position
+                    local lookPos = Vector3.new(targetPos.X, myPos.Y, targetPos.Z)
+                    local targetCFrame = CFrame.new(myPos, lookPos)
+                    HumanoidRootPart.CFrame = HumanoidRootPart.CFrame:Lerp(targetCFrame, state.lockOnSmoothness)
+                end
+            end
+        end
+    end))
+end
+
+local function setupSpeedhack()
+    local character = nil
+    local humanoid = nil
+    
+    local function updateCharacter(char)
+        character = char
+        humanoid = char:FindFirstChildWhichIsA("Humanoid")
+    end
+    
+    if Character then updateCharacter(Character) end
+    
+    addConnection("Speedhack", RunService.Heartbeat:Connect(function(dt)
+        if not state.speedhack or not character or not humanoid then return end
+        
+        if humanoid.MoveDirection.Magnitude > 0 then
+            safeCall(function()
+                character:TranslateBy(humanoid.MoveDirection * state.speedValue * dt)
+            end)
+        end
+    end))
+end
+
+local function setupNoclip()
+    addConnection("Noclip", RunService.Stepped:Connect(function()
+        if not state.noclip or not Character then return end
+        
+        for _, part in ipairs(Character:GetDescendants()) do
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
+        end
+    end))
+end
+
+local function setupGlue()
+    addConnection("Glue", RunService.RenderStepped:Connect(function()
+        if not state.glue or state.glueTarget == "" then return end
+        
+        local targetPlayer = nil
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player.Name:lower():find(state.glueTarget:lower()) or 
+               player.DisplayName:lower():find(state.glueTarget:lower()) then
+                targetPlayer = player
+                break
+            end
+        end
+        
+        if targetPlayer and targetPlayer.Character and Character then
+            local theirHRP = targetPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local myHRP = Character:FindFirstChild("HumanoidRootPart")
+            
+            if theirHRP and myHRP then
+                local behindPos = theirHRP.Position - theirHRP.CFrame.LookVector * 3
+                myHRP.CFrame = CFrame.new(behindPos, theirHRP.Position)
+            end
+        end
+    end))
+end
+
+function setupAllFeatures()
+    setupNoDashCooldown()
+    setupNoWallRunCooldown()
+    setupNoKnockback()
+    setupAntiRagdoll()
+    setupAutoPerfectBlock()
+    setupLockOn()
+    setupSpeedhack()
+    setupNoclip()
+    setupGlue()
+end
+
+local Window = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))():CreateWindow({
+    Title = "Jumper",
+    Icon = "moon-star",
+    Author = "ccgvb",
+    Folder = "Jumper",
+    Size = UDim2.fromOffset(200, 140),
+    Transparent = true,
+    Theme = "Dark",
+    Resizable = true
+})
+
+local Combat = Window:Tab({Title = "Combat"})
+local Player = Window:Tab({Title = "Player"})
+local Movement = Window:Tab({Title = "Movement & TP"})
+local Misc = Window:Tab({Title = "Misc"})
+
+Combat:Toggle({
+    Title = "No Dash Cooldowns",
+    Default = false,
+    Callback = function(v)
+        state.noDashCooldown = v
+        setupNoDashCooldown()
+    end
+})
+
+Combat:Toggle({
+    Title = "No Wall Run Cooldowns",
+    Default = false,
+    Callback = function(v)
+        state.noWallRunCooldown = v
+        setupNoWallRunCooldown()
+    end
+})
+
+Combat:Toggle({
+    Title = "No Knockback",
+    Default = false,
+    Callback = function(v)
+        state.noKnockback = v
+        setupNoKnockback()
+    end
+})
+
+Combat:Section({Title = "Auto Block"})
+
+Combat:Toggle({
+    Title = "Auto Perfect Block",
+    Desc = "Blocks attacks and moves automatically",
+    Default = false,
+    Callback = function(v)
+        state.autoPerfectBlock = v
+    end
+})
+
+Combat:Slider({
+    Title = "Block Delay",
+    Step = 0.001,
+    Value = {Min = 0.004, Max = 0.5, Default = 0.1},
+    Callback = function(v)
+        state.blockDelay = v
+    end
+})
+
+Combat:Slider({
+    Title = "Block Hold Time",
+    Step = 0.1,
+    Value = {Min = 0.1, Max = 2, Default = 0.5},
+    Callback = function(v)
+        state.blockHoldTime = v
+    end
+})
+
+Combat:Slider({
+    Title = "Block End Delay",
+    Step = 0.1,
+    Value = {Min = 0, Max = 1, Default = 0.2},
+    Callback = function(v)
+        state.blockEndDelay = v
+    end
+})
+
+Combat:Slider({
+    Title = "Block Range",
+    Step = 1,
+    Value = {Min = 10, Max = 50, Default = 20},
+    Callback = function(v)
+        state.blockRange = v
+    end
+})
+
+Combat:Section({Title = "Lock On"})
+
+Combat:Toggle({
+    Title = "Lock On",
+    Default = false,
+    Callback = function(v)
+        state.lockOnEnabled = v
+    end
+})
+
+Combat:Slider({
+    Title = "Lock On Smoothness",
+    Step = 0.01,
+    Value = {Min = 0.01, Max = 1, Default = 0.15},
+    Callback = function(v)
+        state.lockOnSmoothness = v
+    end
+})
+
+Movement:Toggle({
+    Title = "Speedhack",
+    Default = false,
+    Callback = function(v)
+        state.speedhack = v
+    end
+})
+
+Movement:Slider({
+    Title = "Speed",
+    Step = 5,
+    Value = {Min = 0, Max = 1000, Default = 50},
+    Callback = function(v)
+        state.speedValue = v
+    end
+})
+
+Movement:Toggle({
+    Title = "Anti Ragdoll",
+    Default = false,
+    Callback = function(v)
+        state.antiRagdoll = v
+        setupAntiRagdoll()
+    end
+})
+
+Player:Toggle({
+    Title = "Glue to Player",
+    Default = false,
+    Callback = function(v)
+        state.glue = v
+    end
+})
+
+Player:Input({
+    Title = "Target Player",
+    Value = "",
+    Placeholder = "Username or Display Name",
+    Callback = function(v)
+        state.glueTarget = v
+    end
+})
+
+Misc:Toggle({
+    Title = "Noclip",
+    Default = false,
+    Callback = function(v)
+        state.noclip = v
+    end
+})
+
+Misc:Button({
+    Title = "Rejoin Server",
+    Callback = function()
+        TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+    end
+})
+
+setupAllFeatures()
