@@ -282,6 +282,8 @@ v185.Heartbeat:Connect(function()
         if v473 and not vu472 then
             vu472 = true
             task.spawn(function()
+                vu189:FireServer("Block", true)
+                task.wait(0.1)
                 for i = 1, 4 do
                     vu189:FireServer("M1", true)
                     task.wait(0.05)
