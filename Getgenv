@@ -8,7 +8,6 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoPunishRange = 20,
     AutoPunishDelay = 0.1,
     AutoPunishAttackDelay = 0.05,
-    AutoPunishAttacks = 4,
     AntiM1 = false,
     AntiM1Range = 20,
     LookAt = false,
@@ -228,7 +227,7 @@ local function vu509(p510)
         return 0, 0
     end
     local data = vu502[p510]
-    if not data or data.attacks < 5 then
+    if not data or data.attacks < 1 then
         return 0, 0
     end
     
@@ -459,10 +458,14 @@ v185.Heartbeat:Connect(function()
             task.spawn(function()
                 vu189:FireServer("Block", true)
                 task.wait(cfg.AutoPunishDelay)
-                for i = 1, cfg.AutoPunishAttacks do
-                    vu189:FireServer("M1", true)
-                    task.wait(cfg.AutoPunishAttackDelay)
-                end
+                vu189:FireServer("M1", true)
+                task.wait(cfg.AutoPunishAttackDelay)
+                vu189:FireServer("M1", true)
+                task.wait(cfg.AutoPunishAttackDelay)
+                vu189:FireServer("M1", true)
+                task.wait(cfg.AutoPunishAttackDelay)
+                vu189:FireServer("M1", true)
+                task.wait(cfg.AutoPunishAttackDelay)
                 vu189:FireServer("M1", false)
                 vu472 = false
             end)
