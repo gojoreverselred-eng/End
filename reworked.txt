@@ -698,29 +698,36 @@ CombatTab:Slider({
     end
 })
 
-CombatTab:Section({Title = "Anti-Stun"})
 
-local antiStunActive = false
-task.spawn(function()
-    while task.wait(0.1) do
-        safeCall(function()
-            if antiStunActive then
-                LocalPlayer.PlayerGui.StatesHolder.States:SetAttribute("Stunned", false)
-            end
-        end)
-    end
-end)
-
-CombatTab:Toggle({
-    Title = "Anti M1's",
-    Desc = "Lets you side dash out of M1's/punches",
-    Default = false,
-    Callback = function(enabled)
-        antiStunActive = enabled
-    end
-})
 
 CombatTab:Section({Title = "Lock On"})
+
+local lockOnGUI = Instance.new("ScreenGui")
+lockOnGUI.Name = "LockOnDraggableGui"
+lockOnGUI.ResetOnSpawn = false
+lockOnGUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local lockOnButton = Instance.new("TextButton")
+lockOnButton.Name = "DraggableButton"
+lockOnButton.Draggable = true
+lockOnButton.Visible = false
+lockOnButton.Text = "Lock On"
+lockOnButton.Size = UDim2.new(0, 80, 0, 40)
+lockOnButton.Position = UDim2.new(0.5, -40, 0.1, 0)
+lockOnButton.BackgroundColor3 = Color3.fromRGB(44, 155, 230)
+lockOnButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+lockOnButton.Font = Enum.Font.SourceSansBold
+lockOnButton.TextSize = 18
+lockOnButton.Parent = lockOnGUI
+
+local lockOnCorner = Instance.new("UICorner")
+lockOnCorner.CornerRadius = UDim.new(0, 8)
+lockOnCorner.Parent = lockOnButton
+
+lockOnButton.MouseButton1Click:Connect(function()
+    lockOnEnabled = not lockOnEnabled
+    lockOnButton.BackgroundColor3 = lockOnEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(44, 155, 230)
+end)
 
 CombatTab:Toggle({
     Title = "Lock On",
@@ -728,6 +735,13 @@ CombatTab:Toggle({
     Default = false,
     Callback = function(enabled)
         lockOnEnabled = enabled
+        lockOnButton.Visible = enabled
+        if not enabled then
+            lockOnTarget = nil
+            if Character and Character:FindFirstChildOfClass("Humanoid") then
+                Character:FindFirstChildOfClass("Humanoid").AutoRotate = true
+            end
+        end
     end
 })
 
@@ -746,8 +760,39 @@ MovementTab:Toggle({
     Default = false,
     Callback = function(enabled)
         speedhackEnabled = enabled
+        speedButton.Visible = enabled
+        if not enabled then
+            speedButton.BackgroundColor3 = Color3.fromRGB(150, 80, 80)
+        end
     end
 })
+
+local speedGUI = Instance.new("ScreenGui")
+speedGUI.Name = "SpeedhackDraggableGui"
+speedGUI.ResetOnSpawn = false
+speedGUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local speedButton = Instance.new("TextButton")
+speedButton.Name = "DraggableButton"
+speedButton.Draggable = true
+speedButton.Visible = false
+speedButton.Text = "Speed"
+speedButton.Size = UDim2.new(0, 80, 0, 40)
+speedButton.Position = UDim2.new(0.5, -40, 0.2, 0)
+speedButton.BackgroundColor3 = Color3.fromRGB(150, 80, 80)
+speedButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+speedButton.Font = Enum.Font.SourceSansBold
+speedButton.TextSize = 18
+speedButton.Parent = speedGUI
+
+local speedCorner = Instance.new("UICorner")
+speedCorner.CornerRadius = UDim.new(0, 8)
+speedCorner.Parent = speedButton
+
+speedButton.MouseButton1Click:Connect(function()
+    speedhackEnabled = not speedhackEnabled
+    speedButton.BackgroundColor3 = speedhackEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(150, 80, 80)
+end)
 
 MovementTab:Slider({
     Title = "Speed",
@@ -760,12 +805,23 @@ MovementTab:Slider({
 
 MovementTab:Section({Title = "Teleports"})
 
+local selectedLocation = nil
+
 MovementTab:Dropdown({
     Title = "Tp to Area",
     Values = {"Middle", "Mountains", "CharaArea", "Cave", "Cabin", "Prison"},
     Value = "Middle",
     Callback = function(location)
-        teleportTo(location)
+        selectedLocation = location
+    end
+})
+
+MovementTab:Button({
+    Title = "Teleport",
+    Callback = function()
+        if selectedLocation then
+            teleportTo(selectedLocation)
+        end
     end
 })
 
