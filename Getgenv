@@ -9,7 +9,6 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoPunishDelay = 0.1,
     AutoPunishAttackDelay = 0.05,
     AutoPunishAttacks = 4,
-    AutoPunishCooldown = 1,
     AntiM1 = false,
     AntiM1Range = 20,
     LookAt = false,
@@ -132,8 +131,6 @@ local vu200 = false
 local vu470 = {}
 local vu501 = {}
 local vu502 = {}
-local vu503 = 0
-local vu504 = {}
 
 for _, folder in ipairs(v190:GetChildren()) do
     if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" then
@@ -177,44 +174,82 @@ local function vu505(p506)
     if not vu502[p506] then
         vu502[p506] = {
             attacks = 0,
-            blocks = 0,
-            avgDelay = 0.15,
+            successfulBlocks = 0,
+            missedBlocks = 0,
+            avgDelay = 0,
             lastAttack = 0,
-            delays = {}
+            delays = {},
+            patterns = {},
+            confidence = 0
         }
     end
     return vu502[p506]
 end
 
-local function vu507(p508)
+local function vu507(p508, p515)
     local data = vu505(p508)
     data.attacks = data.attacks + 1
+    
+    if p515 then
+        data.successfulBlocks = data.successfulBlocks + 1
+    else
+        data.missedBlocks = data.missedBlocks + 1
+    end
+    
+    local totalAttempts = data.successfulBlocks + data.missedBlocks
+    if totalAttempts > 0 then
+        data.confidence = data.successfulBlocks / totalAttempts
+    end
+    
     local currentTime = tick()
     if data.lastAttack > 0 then
         local delay = currentTime - data.lastAttack
         table.insert(data.delays, delay)
-        if #data.delays > 10 then
+        if #data.delays > 20 then
             table.remove(data.delays, 1)
         end
+        
         local sum = 0
         for _, d in ipairs(data.delays) do
             sum = sum + d
         end
         data.avgDelay = sum / #data.delays
+        
+        table.insert(data.patterns, {time = currentTime, delay = delay})
+        if #data.patterns > 30 then
+            table.remove(data.patterns, 1)
+        end
     end
     data.lastAttack = currentTime
 end
 
 local function vu509(p510)
     if not cfg.AutoLearn then
-        return 0
+        return 0, 0
     end
     local data = vu502[p510]
-    if not data then
-        return 0
+    if not data or data.attacks < 5 then
+        return 0, 0
     end
-    local learningBonus = math.min(data.attacks * 0.005, 0.1)
-    return learningBonus
+    
+    local predictionBonus = 0
+    local blockExtension = 0
+    
+    if data.confidence > 0.7 then
+        predictionBonus = math.min(data.confidence * 0.15, 0.15)
+    elseif data.confidence > 0.5 then
+        predictionBonus = math.min(data.confidence * 0.08, 0.08)
+    end
+    
+    if data.avgDelay > 0 and data.avgDelay < 0.5 then
+        predictionBonus = predictionBonus + 0.02
+    end
+    
+    if data.attacks > 15 and data.confidence > 0.6 then
+        blockExtension = 0.05
+    end
+    
+    return predictionBonus, blockExtension
 end
 
 local vu511 = nil
@@ -269,35 +304,8 @@ end
 
 vu188.CharacterAdded:Connect(function()
     task.wait(1)
-    vu514()
-end)
-
-task.spawn(function()
-    while task.wait(0.1) do
-        if cfg.ShowOrbit then
-            local char = vu188.Character
-            if char then
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then
-                    if not vu511 or not vu511.Parent then
-                        vu514()
-                    else
-                        vu511.CFrame = hrp.CFrame
-                        vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
-                        vu511.Color = cfg.OrbitColor
-                        vu511.Transparency = cfg.OrbitTransparency
-                        if vu512 then
-                            vu512.Color3 = cfg.OrbitColor
-                            vu512.SurfaceColor3 = cfg.OrbitColor
-                            vu512.SurfaceTransparency = cfg.OrbitTransparency
-                            vu512.Transparency = cfg.OrbitTransparency
-                        end
-                    end
-                end
-            end
-        else
-            vu513()
-        end
+    if cfg.ShowOrbit then
+        vu514()
     end
 end)
 
@@ -331,7 +339,6 @@ local function vu227()
                         for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
                             local animId = v222.Animation.AnimationId
                             if vu199[animId] or vu501[animId] then
-                                vu507(v214.UserId)
                                 v213 = v214
                                 v208 = v217
                                 break
@@ -416,7 +423,6 @@ local function vu474()
 end
 
 local vu472 = false
-local vu475 = nil
 
 v185.Heartbeat:Connect(function()
     if cfg.AutoBlock then
@@ -424,14 +430,18 @@ v185.Heartbeat:Connect(function()
         if v229 and not vu200 then
             vu200 = true
             local ping = vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000
-            local learnBonus = vu509(v229.UserId)
+            local learnBonus, blockExtend = vu509(v229.UserId)
             local v230 = cfg.AutoBlockStart + (ping / 3) - learnBonus
+            local blockDuration = cfg.AutoBlockEnd + blockExtend
+            
             task.delay(v230, function()
                 if vu200 then
                     vu189:FireServer("Block", true)
-                    task.delay(cfg.AutoBlockEnd, function()
+                    local blockSuccess = true
+                    task.delay(blockDuration, function()
                         if vu200 then
                             vu189:FireServer("Block", false)
+                            vu507(v229.UserId, blockSuccess)
                             vu200 = false
                         end
                     end)
@@ -454,7 +464,6 @@ v185.Heartbeat:Connect(function()
                     task.wait(cfg.AutoPunishAttackDelay)
                 end
                 vu189:FireServer("M1", false)
-                task.wait(cfg.AutoPunishCooldown)
                 vu472 = false
             end)
         end
@@ -478,6 +487,33 @@ v185.Heartbeat:Connect(function()
                 end
             end
         end
+    end
+    
+    if cfg.ShowOrbit then
+        if vu511 and vu511.Parent then
+            local char = vu188.Character
+            if char then
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    vu511.CFrame = hrp.CFrame
+                    vu511.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
+                    vu511.Color = cfg.OrbitColor
+                    vu511.Transparency = cfg.OrbitTransparency
+                    if vu512 then
+                        vu512.Color3 = cfg.OrbitColor
+                        vu512.SurfaceColor3 = cfg.OrbitColor
+                        vu512.SurfaceTransparency = cfg.OrbitTransparency
+                        vu512.Transparency = cfg.OrbitTransparency
+                    end
+                end
+            end
+        else
+            if cfg.ShowOrbit then
+                vu514()
+            end
+        end
+    else
+        vu513()
     end
 end)
 
