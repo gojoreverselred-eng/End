@@ -12,6 +12,12 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     Invisibility = false
 }
 
+game:GetService("StarterGui"):SetCore("SendNotification", {
+    Title = "Jumper",
+    Text = "getgenv loaded",
+    Duration = 3
+})
+
 local cfg = getgenv().JumperConfig
 
 local vu9 = game:GetService("Players")
