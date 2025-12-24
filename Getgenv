@@ -1,16 +1,18 @@
 getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoBlock = false,
-    AutoBlockStart = 0.1,
-    AutoBlockEnd = 0.3,
+    AutoBlockStart = 0.08,
+    AutoBlockEnd = 0.28,
     AutoBlockRange = 20,
     AutoBlockDash = false,
-    AutoBlockDashStart = 0.05,
-    AutoBlockDashEnd = 0.25,
+    AutoBlockDashStart = 0.04,
+    AutoBlockDashEnd = 0.22,
     AutoPunish = false,
     AutoPunishRange = 20,
-    AutoPunishDelay = 1,
+    AutoPunishDelay = 0.8,
     AutoPunishHits = 4,
-    AutoPunishHitDelay = 0.05,
+    AutoPunishHitDelay = 0.04,
+    HoldUntilAnimEnds = false,
+    AutoPunishEarlyRelease = 0.03,
     AntiM1 = false,
     AntiM1Range = 20,
     LookAt = false,
@@ -20,133 +22,41 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "Jumper",
-    Text = "getgenv loaded",
+    Text = "Script loaded",
     Duration = 3
 })
 
 local cfg = getgenv().JumperConfig
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Stats = game:GetService("Stats")
+local LocalPlayer = Players.LocalPlayer
+local CombatRemote = LocalPlayer:WaitForChild("Remotes"):WaitForChild("Combat"):WaitForChild("AttackInput")
+local AnimFolder = ReplicatedStorage:WaitForChild("Animations"):WaitForChild("Attacks")
 
-local vu9 = game:GetService("Players")
-local v10 = game:GetService("TextChatService")
-local vu11 = vu9.LocalPlayer
-local vu12 = vu11.Character or vu11.CharacterAdded:Wait()
-local vu13 = {
-    "skibidislume007",
-    "hashtag_hashtagcoma3"
-}
+local M1Anims = {}
+local isBlocking = false
+local AbilityAnims = {}
+local DashAnims = {}
 
-vu11.CharacterAdded:Connect(function(p14)
-    vu12 = p14
-end)
-
-local function vu17()
-    if vu12 and vu12:FindFirstChild("HumanoidRootPart") then
-        local v15 = vu12.HumanoidRootPart
-        local v16 = workspace.Map.Model.Barriers:FindFirstChild("AntiStuckInVoid")
-        if v16 then
-            firetouchinterest(v15, v16, 0)
-            task.wait(0.1)
-            firetouchinterest(v15, v16, 1)
-        end
-    end
-end
-
-local function vu24(p18)
-    if vu12 then
-        local v19 = vu12
-        for _, v23 in ipairs(v19:GetChildren()) do
-            if v23:IsA("BasePart") then
-                v23.Anchored = p18
-            end
-        end
-    end
-end
-
-local function vu29()
-    for _, v28 in ipairs(vu13) do
-        if vu11.Name == v28 then
-            return true
-        end
-    end
-    return false
-end
-
-local vu30 = getrawmetatable(game)
-setreadonly(vu30, false)
-local vu31 = vu30.__namecall
-setreadonly(vu30, true)
-
-function noattack()
-    setreadonly(vu30, false)
-    function vu30.__namecall(p32, ...)
-        if getnamecallmethod() ~= "FireServer" or p32.Name ~= "AttackInput" then
-            return vu31(p32, ...)
-        else
-            return nil
-        end
-    end
-    setreadonly(vu30, true)
-end
-
-function attack()
-    setreadonly(vu30, false)
-    vu30.__namecall = vu31
-    setreadonly(vu30, true)
-end
-
-v10:WaitForChild("TextChannels"):WaitForChild("RBXGeneral").MessageReceived:Connect(function(p33)
-    if p33.TextSource and p33.TextSource.UserId ~= vu11.UserId then
-        if vu29() then
-            return
-        end
-        local v34 = p33.Text:lower()
-        if v34 == "!kill" then
-            vu17()
-        elseif v34 == "!freeze" then
-            vu24(true)
-        elseif v34 == "!unfreeze" then
-            vu24(false)
-        elseif v34 == "!noattack" then
-            noattack()
-        elseif v34 == "!yesattack" then
-            attack()
-        elseif v34 == "!speedup" then
-            speedup()
-        elseif v34 == "!kick" then
-            vu11:Kick("sybau boi")
-        end
-    end
-end)
-
-local v185 = game:GetService("RunService")
-local v186 = game:GetService("ReplicatedStorage")
-local vu187 = game:GetService("Stats")
-local vu188 = vu9.LocalPlayer
-local vu189 = vu188:WaitForChild("Remotes"):WaitForChild("Combat"):WaitForChild("AttackInput")
-local v190 = v186:WaitForChild("Animations"):WaitForChild("Attacks")
-
-local vu199 = {}
-local vu200 = false
-local vu470 = {}
-local vu490 = {}
-
-for _, folder in ipairs(v190:GetChildren()) do
-    if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" then
+for _, folder in ipairs(AnimFolder:GetChildren()) do
+    if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" and folder.Name ~= "Idle" then
         for _, anim in ipairs(folder:GetDescendants()) do
-            if anim:IsA("Animation") then
-                vu470[anim.AnimationId] = true
+            if anim:IsA("Animation") and anim.Name ~= "Idle" then
+                AbilityAnims[anim.AnimationId] = true
             end
         end
     end
 end
 
-for _, folder in ipairs(v190:GetChildren()) do
-    if folder:IsA("Folder") then
+for _, folder in ipairs(AnimFolder:GetChildren()) do
+    if folder:IsA("Folder") and folder.Name ~= "Block" and folder.Name ~= "Idle" then
         for _, subfolder in ipairs(folder:GetChildren()) do
-            if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" then
+            if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" and subfolder.Name ~= "Idle" then
                 for _, anim in ipairs(subfolder:GetDescendants()) do
-                    if anim:IsA("Animation") then
-                        vu490[anim.AnimationId] = true
+                    if anim:IsA("Animation") and anim.Name ~= "Idle" then
+                        DashAnims[anim.AnimationId] = true
                     end
                 end
             end
@@ -154,44 +64,42 @@ for _, folder in ipairs(v190:GetChildren()) do
     end
 end
 
-local v191 = v190:WaitForChild("Global"):WaitForChild("M1")
-for _, v204 in ipairs(v191:GetDescendants()) do
-    if v204:IsA("Animation") then
-        vu199[v204.AnimationId] = true
+local M1Folder = AnimFolder:WaitForChild("Global"):WaitForChild("M1")
+for _, anim in ipairs(M1Folder:GetDescendants()) do
+    if anim:IsA("Animation") and anim.Name ~= "Idle" then
+        M1Anims[anim.AnimationId] = true
     end
 end
 
-local function vu205()
-    if vu200 then
-        vu189:FireServer("Block", false)
-        vu200 = false
+local function stopBlocking()
+    if isBlocking then
+        CombatRemote:FireServer("Block", false)
+        isBlocking = false
     end
 end
 
-local function vu227()
-    local v206 = vu188.Character
-    if not v206 then
-        return nil
-    end
-    local v207 = v206:FindFirstChild("HumanoidRootPart")
-    if not v207 then
-        return nil
-    end
-    local v208 = cfg.AutoBlockRange
-    local v213 = nil
-    for _, v214 in ipairs(vu9:GetPlayers()) do
-        if v214 ~= vu188 then
-            local v215 = v214.Character
-            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
-            if v216 then
-                local v217 = (v207.Position - v216.Position).Magnitude
-                if v217 < v208 then
-                    local v218 = v215:FindFirstChildOfClass("Humanoid")
-                    if v218 then
-                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            if vu199[v222.Animation.AnimationId] then
-                                v213 = v214
-                                v208 = v217
+local function findNearestM1Attacker()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local closestDist = cfg.AutoBlockRange
+    local target = nil
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local enemyChar = player.Character
+            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+            if enemyHRP then
+                local dist = (hrp.Position - enemyHRP.Position).Magnitude
+                if dist < closestDist then
+                    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                            if M1Anims[track.Animation.AnimationId] then
+                                target = player
+                                closestDist = dist
                                 break
                             end
                         end
@@ -200,33 +108,31 @@ local function vu227()
             end
         end
     end
-    return v213
+    return target
 end
 
-local function vu491()
-    local v206 = vu188.Character
-    if not v206 then
-        return nil
-    end
-    local v207 = v206:FindFirstChild("HumanoidRootPart")
-    if not v207 then
-        return nil
-    end
-    local v208 = cfg.AutoBlockRange
-    local v213 = nil
-    for _, v214 in ipairs(vu9:GetPlayers()) do
-        if v214 ~= vu188 then
-            local v215 = v214.Character
-            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
-            if v216 then
-                local v217 = (v207.Position - v216.Position).Magnitude
-                if v217 < v208 then
-                    local v218 = v215:FindFirstChildOfClass("Humanoid")
-                    if v218 then
-                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            if vu490[v222.Animation.AnimationId] then
-                                v213 = v214
-                                v208 = v217
+local function findNearestDashAttacker()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local closestDist = cfg.AutoBlockRange
+    local target = nil
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local enemyChar = player.Character
+            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+            if enemyHRP then
+                local dist = (hrp.Position - enemyHRP.Position).Magnitude
+                if dist < closestDist then
+                    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                            if DashAnims[track.Animation.AnimationId] then
+                                target = player
+                                closestDist = dist
                                 break
                             end
                         end
@@ -235,33 +141,31 @@ local function vu491()
             end
         end
     end
-    return v213
+    return target
 end
 
-local function vu471()
-    local v206 = vu188.Character
-    if not v206 then
-        return nil
-    end
-    local v207 = v206:FindFirstChild("HumanoidRootPart")
-    if not v207 then
-        return nil
-    end
-    local v208 = cfg.AutoPunishRange
-    local v213 = nil
-    for _, v214 in ipairs(vu9:GetPlayers()) do
-        if v214 ~= vu188 then
-            local v215 = v214.Character
-            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
-            if v216 then
-                local v217 = (v207.Position - v216.Position).Magnitude
-                if v217 < v208 then
-                    local v218 = v215:FindFirstChildOfClass("Humanoid")
-                    if v218 then
-                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            if vu470[v222.Animation.AnimationId] then
-                                v213 = v214
-                                v208 = v217
+local function findNearestAbilityUser()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local closestDist = cfg.AutoPunishRange
+    local target = nil
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local enemyChar = player.Character
+            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+            if enemyHRP then
+                local dist = (hrp.Position - enemyHRP.Position).Magnitude
+                if dist < closestDist then
+                    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                            if AbilityAnims[track.Animation.AnimationId] then
+                                target = player
+                                closestDist = dist
                                 break
                             end
                         end
@@ -270,33 +174,31 @@ local function vu471()
             end
         end
     end
-    return v213
+    return target
 end
 
-local function vu474()
-    local v206 = vu188.Character
-    if not v206 then
-        return nil
-    end
-    local v207 = v206:FindFirstChild("HumanoidRootPart")
-    if not v207 then
-        return nil
-    end
-    local v208 = cfg.AntiM1Range
-    local v213 = nil
-    for _, v214 in ipairs(vu9:GetPlayers()) do
-        if v214 ~= vu188 then
-            local v215 = v214.Character
-            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
-            if v216 then
-                local v217 = (v207.Position - v216.Position).Magnitude
-                if v217 < v208 then
-                    local v218 = v215:FindFirstChildOfClass("Humanoid")
-                    if v218 then
-                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
-                            if vu199[v222.Animation.AnimationId] then
-                                v213 = v214
-                                v208 = v217
+local function findNearestAntiM1Target()
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+    
+    local closestDist = cfg.AntiM1Range
+    local target = nil
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local enemyChar = player.Character
+            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
+            if enemyHRP then
+                local dist = (hrp.Position - enemyHRP.Position).Magnitude
+                if dist < closestDist then
+                    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                            if M1Anims[track.Animation.AnimationId] then
+                                target = player
+                                closestDist = dist
                                 break
                             end
                         end
@@ -305,26 +207,28 @@ local function vu474()
             end
         end
     end
-    return v213
+    return target
 end
 
-local vu472 = false
-local vu475 = nil
-local vu492 = false
+local isPunishing = false
+local dashBlocking = false
+local currentPunishTrack = nil
+local currentPunishTarget = nil
 
-v185.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function()
     if cfg.AutoBlock then
-        local v229 = vu227()
-        if v229 and not vu200 then
-            vu200 = true
-            local v230 = cfg.AutoBlockStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
-            task.delay(v230, function()
-                if vu200 then
-                    vu189:FireServer("Block", true)
+        local m1Target = findNearestM1Attacker()
+        if m1Target and not isBlocking then
+            isBlocking = true
+            local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 2000
+            local startDelay = cfg.AutoBlockStart + ping
+            task.delay(startDelay, function()
+                if isBlocking then
+                    CombatRemote:FireServer("Block", true)
                     task.delay(cfg.AutoBlockEnd, function()
-                        if vu200 then
-                            vu189:FireServer("Block", false)
-                            vu200 = false
+                        if isBlocking then
+                            CombatRemote:FireServer("Block", false)
+                            isBlocking = false
                         end
                     end)
                 end
@@ -332,17 +236,18 @@ v185.Heartbeat:Connect(function()
         end
         
         if cfg.AutoBlockDash then
-            local v493 = vu491()
-            if v493 and not vu492 then
-                vu492 = true
-                local v494 = cfg.AutoBlockDashStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
-                task.delay(v494, function()
-                    if vu492 then
-                        vu189:FireServer("Block", true)
+            local dashTarget = findNearestDashAttacker()
+            if dashTarget and not dashBlocking then
+                dashBlocking = true
+                local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 2000
+                local startDelay = cfg.AutoBlockDashStart + ping
+                task.delay(startDelay, function()
+                    if dashBlocking then
+                        CombatRemote:FireServer("Block", true)
                         task.delay(cfg.AutoBlockDashEnd, function()
-                            if vu492 then
-                                vu189:FireServer("Block", false)
-                                vu492 = false
+                            if dashBlocking then
+                                CombatRemote:FireServer("Block", false)
+                                dashBlocking = false
                             end
                         end)
                     end
@@ -350,63 +255,106 @@ v185.Heartbeat:Connect(function()
             end
         end
     else
-        vu205()
+        stopBlocking()
     end
     
     if cfg.AutoPunish then
-        local v473 = vu471()
-        if v473 and not vu472 and not vu200 and not vu492 then
-            vu472 = true
-            task.spawn(function()
-                task.wait(cfg.AutoBlockEnd + 0.05)
-                for i = 1, cfg.AutoPunishHits do
-                    vu189:FireServer("M1", true)
-                    task.wait(cfg.AutoPunishHitDelay)
+        local abilityTarget = findNearestAbilityUser()
+        if abilityTarget and not isPunishing and not isBlocking and not dashBlocking then
+            local enemyChar = abilityTarget.Character
+            local hum = enemyChar and enemyChar:FindFirstChildOfClass("Humanoid")
+            if hum then
+                for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
+                    if AbilityAnims[track.Animation.AnimationId] then
+                        isPunishing = true
+                        currentPunishTrack = track
+                        currentPunishTarget = abilityTarget
+                        
+                        if cfg.HoldUntilAnimEnds then
+                            task.spawn(function()
+                                CombatRemote:FireServer("Block", true)
+                                while isPunishing and currentPunishTrack and currentPunishTrack.IsPlaying and currentPunishTarget == abilityTarget do
+                                    task.wait()
+                                end
+                                CombatRemote:FireServer("Block", false)
+                                if isPunishing and currentPunishTarget == abilityTarget then
+                                    for i = 1, cfg.AutoPunishHits do
+                                        CombatRemote:FireServer("M1", true)
+                                        task.wait(cfg.AutoPunishHitDelay)
+                                    end
+                                    CombatRemote:FireServer("M1", false)
+                                    task.wait(cfg.AutoPunishDelay)
+                                end
+                                isPunishing = false
+                                currentPunishTrack = nil
+                                currentPunishTarget = nil
+                            end)
+                        else
+                            task.spawn(function()
+                                task.wait(cfg.AutoPunishEarlyRelease)
+                                if isPunishing and currentPunishTarget == abilityTarget then
+                                    for i = 1, cfg.AutoPunishHits do
+                                        CombatRemote:FireServer("M1", true)
+                                        task.wait(cfg.AutoPunishHitDelay)
+                                    end
+                                    CombatRemote:FireServer("M1", false)
+                                    task.wait(cfg.AutoPunishDelay)
+                                end
+                                isPunishing = false
+                                currentPunishTrack = nil
+                                currentPunishTarget = nil
+                            end)
+                        end
+                        break
+                    end
                 end
-                vu189:FireServer("M1", false)
-                task.wait(cfg.AutoPunishDelay)
-                vu472 = false
-            end)
+            end
+        elseif isPunishing and currentPunishTrack and not currentPunishTrack.IsPlaying then
+            isPunishing = false
+            currentPunishTrack = nil
+            currentPunishTarget = nil
+        end
+    else
+        if isPunishing then
+            isPunishing = false
+            currentPunishTrack = nil
+            currentPunishTarget = nil
         end
     end
 end)
 
-v185.RenderStepped:Connect(function()
+RunService.RenderStepped:Connect(function()
     if cfg.LookAt then
-        local v476 = vu227()
-        if v476 and v476.Character then
-            local v477 = v476.Character:FindFirstChild("HumanoidRootPart")
-            local v478 = vu188.Character
-            if v478 then
-                v478 = v478:FindFirstChild("HumanoidRootPart")
-            end
-            if v477 and v478 then
-                local targetPos = v477.Position
-                local currentPos = v478.Position
+        local target = findNearestM1Attacker()
+        if target and target.Character then
+            local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
+            local myChar = LocalPlayer.Character
+            local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+            
+            if targetHRP and myHRP then
+                local targetPos = targetHRP.Position
+                local currentPos = myHRP.Position
                 local lookPos = Vector3.new(targetPos.X, currentPos.Y, targetPos.Z)
                 local targetCFrame = CFrame.new(currentPos, lookPos)
-                v478.CFrame = v478.CFrame:Lerp(targetCFrame, cfg.LookAtSmoothness)
+                myHRP.CFrame = myHRP.CFrame:Lerp(targetCFrame, cfg.LookAtSmoothness)
             end
         end
     end
 end)
 
-v185.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function()
     if cfg.AntiM1 then
-        local v483 = vu474()
-        if v483 then
-            local v410 = vu188.PlayerGui.StatesHolder.States
-            v410:SetAttribute("Stunned", false)
+        local antiM1Target = findNearestAntiM1Target()
+        if antiM1Target then
+            local statesHolder = LocalPlayer.PlayerGui.StatesHolder.States
+            statesHolder:SetAttribute("Stunned", false)
         end
     end
 end)
 
-local v281 = game:GetService("Players")
-local vu282 = game:GetService("RunService")
-local v283 = v281.LocalPlayer
-local vu285 = {}
-local vu286 = nil
-local vu287 = {
+local connections = {}
+local currentAnim = nil
+local bodyParts = {
     "Head",
     "Torso",
     "Left Arm",
@@ -415,60 +363,61 @@ local vu287 = {
     "Right Leg"
 }
 
-local function vu295(p288, p289)
-    for _, v293 in ipairs(vu287) do
-        local v294 = p289:FindFirstChild(v293)
-        if v294 and v294:IsA("BasePart") then
-            v294.Transparency = p288
+local function setTransparency(transparency, character)
+    for _, partName in ipairs(bodyParts) do
+        local part = character:FindFirstChild(partName)
+        if part and part:IsA("BasePart") then
+            part.Transparency = transparency
         end
     end
 end
 
-local function vu300()
-    for _, v299 in pairs(vu285) do
-        if v299 then
-            v299:Disconnect()
+local function cleanup()
+    for _, connection in pairs(connections) do
+        if connection then
+            connection:Disconnect()
         end
     end
-    vu285 = {}
-    if vu286 and vu286.IsPlaying then
-        vu286:Stop()
+    connections = {}
+    if currentAnim and currentAnim.IsPlaying then
+        currentAnim:Stop()
     end
 end
 
-local function vu305(p301)
-    vu300()
-    local v302 = p301:WaitForChild("Humanoid")
-    local v303 = v302:FindFirstChildOfClass("Animator") or Instance.new("Animator", v302)
-    local v304 = Instance.new("Animation")
-    v304.AnimationId = "rbxassetid://83555998356899"
-    vu286 = v303:LoadAnimation(v304)
-    vu286.Priority = Enum.AnimationPriority.Action4
+local function setupInvisibility(character)
+    cleanup()
+    local humanoid = character:WaitForChild("Humanoid")
+    local animator = humanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", humanoid)
+    local animation = Instance.new("Animation")
+    animation.AnimationId = "rbxassetid://83555998356899"
+    currentAnim = animator:LoadAnimation(animation)
+    currentAnim.Priority = Enum.AnimationPriority.Action4
+    
     if cfg.Invisibility then
-        vu295(0.5, p301)
-        table.insert(vu285, vu282.Heartbeat:Connect(function()
-            if not vu286.IsPlaying then
-                vu286:Play()
+        setTransparency(0.5, character)
+        table.insert(connections, RunService.Heartbeat:Connect(function()
+            if not currentAnim.IsPlaying then
+                currentAnim:Play()
             end
-            vu286:AdjustSpeed(0)
-            vu286.TimePosition = 10
+            currentAnim:AdjustSpeed(0)
+            currentAnim.TimePosition = 10
         end))
-        table.insert(vu285, vu282.RenderStepped:Connect(function()
-            if vu286.IsPlaying then
-                vu286:Stop()
+        table.insert(connections, RunService.RenderStepped:Connect(function()
+            if currentAnim.IsPlaying then
+                currentAnim:Stop()
             end
         end))
     else
-        vu295(0, p301)
+        setTransparency(0, character)
     end
 end
 
-v283.CharacterAdded:Connect(function(p306)
-    p306:WaitForChild("HumanoidRootPart")
-    vu300()
-    vu305(p306)
+LocalPlayer.CharacterAdded:Connect(function(character)
+    character:WaitForChild("HumanoidRootPart")
+    cleanup()
+    setupInvisibility(character)
 end)
 
-if v283.Character then
-    vu305(v283.Character)
+if LocalPlayer.Character then
+    setupInvisibility(LocalPlayer.Character)
 end
