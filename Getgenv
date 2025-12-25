@@ -12,9 +12,9 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoPunishHits = 4,
     AutoPunishHitDelay = 0.04,
     HoldUntilAnimEnds = false,
-    AutoPunishEarlyRelease = 0.03,
+    AnimEarlyRelease = 0.15,
     AntiM1 = false,
-    AntiM1Range = 20,
+    AutoLearn = false,
     LookAt = false,
     LookAtSmoothness = 0.15,
     Invisibility = false
@@ -39,12 +39,31 @@ local M1Anims = {}
 local isBlocking = false
 local AbilityAnims = {}
 local DashAnims = {}
+local IgnoredAnims = {
+    ["rbxassetid://83555998356899"] = true
+}
+local LearnedTimings = {}
+
+local ignoredAnimPaths = {
+    "Attacks.Anubis.Evil Spirit",
+    "Attacks.Chara.Reset",
+    "Attacks.Anubis.Pose"
+}
 
 for _, folder in ipairs(AnimFolder:GetChildren()) do
     if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" and folder.Name ~= "Idle" then
         for _, anim in ipairs(folder:GetDescendants()) do
             if anim:IsA("Animation") and anim.Name ~= "Idle" then
-                AbilityAnims[anim.AnimationId] = true
+                local isIgnored = false
+                for _, ignorePath in ipairs(ignoredAnimPaths) do
+                    if anim:GetFullName():find(ignorePath) then
+                        isIgnored = true
+                        break
+                    end
+                end
+                if not isIgnored then
+                    AbilityAnims[anim.AnimationId] = true
+                end
             end
         end
     end
@@ -56,7 +75,16 @@ for _, folder in ipairs(AnimFolder:GetChildren()) do
             if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" and subfolder.Name ~= "Idle" then
                 for _, anim in ipairs(subfolder:GetDescendants()) do
                     if anim:IsA("Animation") and anim.Name ~= "Idle" then
-                        DashAnims[anim.AnimationId] = true
+                        local isIgnored = false
+                        for _, ignorePath in ipairs(ignoredAnimPaths) do
+                            if anim:GetFullName():find(ignorePath) then
+                                isIgnored = true
+                                break
+                            end
+                        end
+                        if not isIgnored then
+                            DashAnims[anim.AnimationId] = true
+                        end
                     end
                 end
             end
@@ -66,7 +94,7 @@ end
 
 local M1Folder = AnimFolder:WaitForChild("Global"):WaitForChild("M1")
 for _, anim in ipairs(M1Folder:GetDescendants()) do
-    if anim:IsA("Animation") and anim.Name ~= "Idle" then
+    if anim:IsA("Animation") and anim.Name ~= "Idle" and not IgnoredAnims[anim.AnimationId] then
         M1Anims[anim.AnimationId] = true
     end
 end
@@ -77,8 +105,6 @@ local function stopBlocking()
         isBlocking = false
     end
 end
-
-local function findNearestM1Attacker()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -178,12 +204,12 @@ local function findNearestAbilityUser()
 end
 
 local function findNearestAntiM1Target()
+    if not cfg.AntiM1 then return nil end
     local char = LocalPlayer.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return nil end
     
-    local closestDist = cfg.AntiM1Range
     local target = nil
     
     for _, player in ipairs(Players:GetPlayers()) do
@@ -192,14 +218,12 @@ local function findNearestAntiM1Target()
             local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
             if enemyHRP then
                 local dist = (hrp.Position - enemyHRP.Position).Magnitude
-                if dist < closestDist then
+                if dist < 25 then
                     local hum = enemyChar:FindFirstChildOfClass("Humanoid")
                     if hum then
                         for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
                             if M1Anims[track.Animation.AnimationId] then
-                                target = player
-                                closestDist = dist
-                                break
+                                return player
                             end
                         end
                     end
@@ -207,7 +231,7 @@ local function findNearestAntiM1Target()
             end
         end
     end
-    return target
+    return nil
 end
 
 local isPunishing = false
@@ -215,19 +239,62 @@ local dashBlocking = false
 local currentPunishTrack = nil
 local currentPunishTarget = nil
 
+local function updateLearning(playerId, animId, blockSuccess)
+    if not cfg.AutoLearn then return end
+    if not LearnedTimings[playerId] then
+        LearnedTimings[playerId] = {}
+    end
+    if not LearnedTimings[playerId][animId] then
+        LearnedTimings[playerId][animId] = {
+            successes = 0,
+            failures = 0,
+            avgDelay = cfg.AutoBlockStart
+        }
+    end
+    local data = LearnedTimings[playerId][animId]
+    if blockSuccess then
+        data.successes = data.successes + 1
+        data.avgDelay = math.max(0.05, data.avgDelay - 0.005)
+    else
+        data.failures = data.failures + 1
+        data.avgDelay = math.min(0.15, data.avgDelay + 0.01)
+    end
+end
+
+local function getLearnedDelay(playerId, animId, defaultDelay)
+    if not cfg.AutoLearn then return defaultDelay end
+    if LearnedTimings[playerId] and LearnedTimings[playerId][animId] then
+        return LearnedTimings[playerId][animId].avgDelay
+    end
+    return defaultDelay
+end
+
 RunService.Heartbeat:Connect(function()
     if cfg.AutoBlock then
         local m1Target = findNearestM1Attacker()
         if m1Target and not isBlocking then
             isBlocking = true
             local ping = Stats.Network.ServerStatsItem["Data Ping"]:GetValue() / 2000
-            local startDelay = cfg.AutoBlockStart + ping
+            local currentAnim = nil
+            local enemyHum = m1Target.Character and m1Target.Character:FindFirstChildOfClass("Humanoid")
+            if enemyHum then
+                for _, track in ipairs(enemyHum:GetPlayingAnimationTracks()) do
+                    if M1Anims[track.Animation.AnimationId] then
+                        currentAnim = track.Animation.AnimationId
+                        break
+                    end
+                end
+            end
+            local startDelay = getLearnedDelay(m1Target.UserId, currentAnim, cfg.AutoBlockStart) + ping
             task.delay(startDelay, function()
                 if isBlocking then
                     CombatRemote:FireServer("Block", true)
+                    local blockStart = tick()
                     task.delay(cfg.AutoBlockEnd, function()
                         if isBlocking then
                             CombatRemote:FireServer("Block", false)
+                            local blockDuration = tick() - blockStart
+                            updateLearning(m1Target.UserId, currentAnim, blockDuration >= 0.1)
                             isBlocking = false
                         end
                     end)
@@ -291,7 +358,7 @@ RunService.Heartbeat:Connect(function()
                             end)
                         else
                             task.spawn(function()
-                                task.wait(cfg.AutoPunishEarlyRelease)
+                                task.wait(cfg.AnimEarlyRelease)
                                 if isPunishing and currentPunishTarget == abilityTarget then
                                     for i = 1, cfg.AutoPunishHits do
                                         CombatRemote:FireServer("M1", true)
@@ -344,10 +411,12 @@ end)
 
 RunService.Heartbeat:Connect(function()
     if cfg.AntiM1 then
-        local antiM1Target = findNearestAntiM1Target()
-        if antiM1Target then
-            local statesHolder = LocalPlayer.PlayerGui.StatesHolder.States
-            statesHolder:SetAttribute("Stunned", false)
+        local statesHolder = LocalPlayer.PlayerGui:FindFirstChild("StatesHolder")
+        if statesHolder then
+            local states = statesHolder:FindFirstChild("States")
+            if states then
+                states:SetAttribute("Stunned", false)
+            end
         end
     end
 end)
