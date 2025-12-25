@@ -45,25 +45,25 @@ local IgnoredAnims = {
 local LearnedTimings = {}
 
 local ignoredAnimPaths = {
-    "Attacks.Anubis.Evil Spirit",
-    "Attacks.Chara.Reset",
-    "Attacks.Anubis.Pose"
+    "Evil Spirit",
+    "Reset",
+    "Pose"
 }
+
+local function isIgnoredAnim(anim)
+    for _, ignoredName in ipairs(ignoredAnimPaths) do
+        if anim:GetFullName():find(ignoredName) then
+            return true
+        end
+    end
+    return false
+end
 
 for _, folder in ipairs(AnimFolder:GetChildren()) do
     if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" and folder.Name ~= "Idle" then
         for _, anim in ipairs(folder:GetDescendants()) do
-            if anim:IsA("Animation") and anim.Name ~= "Idle" then
-                local isIgnored = false
-                for _, ignorePath in ipairs(ignoredAnimPaths) do
-                    if anim:GetFullName():find(ignorePath) then
-                        isIgnored = true
-                        break
-                    end
-                end
-                if not isIgnored then
-                    AbilityAnims[anim.AnimationId] = true
-                end
+            if anim:IsA("Animation") and anim.Name ~= "Idle" and not isIgnoredAnim(anim) then
+                AbilityAnims[anim.AnimationId] = true
             end
         end
     end
@@ -74,17 +74,8 @@ for _, folder in ipairs(AnimFolder:GetChildren()) do
         for _, subfolder in ipairs(folder:GetChildren()) do
             if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" and subfolder.Name ~= "Idle" then
                 for _, anim in ipairs(subfolder:GetDescendants()) do
-                    if anim:IsA("Animation") and anim.Name ~= "Idle" then
-                        local isIgnored = false
-                        for _, ignorePath in ipairs(ignoredAnimPaths) do
-                            if anim:GetFullName():find(ignorePath) then
-                                isIgnored = true
-                                break
-                            end
-                        end
-                        if not isIgnored then
-                            DashAnims[anim.AnimationId] = true
-                        end
+                    if anim:IsA("Animation") and anim.Name ~= "Idle" and not isIgnoredAnim(anim) then
+                        DashAnims[anim.AnimationId] = true
                     end
                 end
             end
@@ -105,6 +96,8 @@ local function stopBlocking()
         isBlocking = false
     end
 end
+
+local function findNearestM1Attacker()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -203,37 +196,6 @@ local function findNearestAbilityUser()
     return target
 end
 
-local function findNearestAntiM1Target()
-    if not cfg.AntiM1 then return nil end
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil end
-    
-    local target = nil
-    
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            local enemyChar = player.Character
-            local enemyHRP = enemyChar and enemyChar:FindFirstChild("HumanoidRootPart")
-            if enemyHRP then
-                local dist = (hrp.Position - enemyHRP.Position).Magnitude
-                if dist < 25 then
-                    local hum = enemyChar:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        for _, track in ipairs(hum:GetPlayingAnimationTracks()) do
-                            if M1Anims[track.Animation.AnimationId] then
-                                return player
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return nil
-end
-
 local isPunishing = false
 local dashBlocking = false
 local currentPunishTrack = nil
@@ -294,7 +256,9 @@ RunService.Heartbeat:Connect(function()
                         if isBlocking then
                             CombatRemote:FireServer("Block", false)
                             local blockDuration = tick() - blockStart
-                            updateLearning(m1Target.UserId, currentAnim, blockDuration >= 0.1)
+                            if currentAnim then
+                                updateLearning(m1Target.UserId, currentAnim, blockDuration >= 0.1)
+                            end
                             isBlocking = false
                         end
                     end)
