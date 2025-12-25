@@ -164,7 +164,7 @@ local function isIgnoredAnim(anim)
 end
 
 for _, folder in ipairs(AnimFolder:GetChildren()) do
-    if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" and folder.Name ~= "Idle" then
+    if folder.Name ~= "Backdash" and folder.Name ~= "Sidedash" and folder.Name ~= "Block" and folder.Name ~= "Idle" and folder.Name ~= "Global" then
         for _, anim in ipairs(folder:GetDescendants()) do
             if anim:IsA("Animation") and anim.Name ~= "Idle" and not isIgnoredAnim(anim) then
                 AbilityAnims[anim.AnimationId] = true
@@ -174,7 +174,7 @@ for _, folder in ipairs(AnimFolder:GetChildren()) do
 end
 
 for _, folder in ipairs(AnimFolder:GetChildren()) do
-    if folder:IsA("Folder") and folder.Name ~= "Block" and folder.Name ~= "Idle" then
+    if folder:IsA("Folder") and folder.Name ~= "Block" and folder.Name ~= "Idle" and folder.Name ~= "Global" then
         for _, subfolder in ipairs(folder:GetChildren()) do
             if subfolder:IsA("Folder") and subfolder.Name ~= "Back" and subfolder.Name ~= "Left" and subfolder.Name ~= "Right" and subfolder.Name ~= "Finisher" and subfolder.Name ~= "Idle" then
                 for _, anim in ipairs(subfolder:GetDescendants()) do
@@ -407,17 +407,11 @@ RunService.Heartbeat:Connect(function()
                         
                         if cfg.HoldUntilAnimEnds then
                             task.spawn(function()
-                                local wasBlocking = false
+                                CombatRemote:FireServer("Block", true)
                                 while isPunishing and currentPunishTrack and currentPunishTrack.IsPlaying and currentPunishTarget == abilityTarget do
-                                    if not wasBlocking then
-                                        CombatRemote:FireServer("Block", true)
-                                        wasBlocking = true
-                                    end
                                     task.wait()
                                 end
-                                if wasBlocking then
-                                    CombatRemote:FireServer("Block", false)
-                                end
+                                CombatRemote:FireServer("Block", false)
                                 if isPunishing and currentPunishTarget == abilityTarget then
                                     for i = 1, cfg.AutoPunishHits do
                                         CombatRemote:FireServer("M1", true)
@@ -519,6 +513,7 @@ local function createOrbit()
     orbitPart.Transparency = cfg.OrbitTransparency
     orbitPart.CanCollide = false
     orbitPart.Anchored = true
+    orbitPart.CastShadow = false
     orbitPart.CFrame = hrp.CFrame
     orbitPart.Parent = workspace
 end
