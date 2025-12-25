@@ -17,16 +17,120 @@ getgenv().JumperConfig = getgenv().JumperConfig or {
     AutoLearn = false,
     LookAt = false,
     LookAtSmoothness = 0.15,
-    Invisibility = false
+    Invisibility = false,
+    ShowOrbit = false,
+    OrbitColor = Color3.fromRGB(0, 255, 0),
+    OrbitTransparency = 0.8,
+    SaveCurrentConfig = false,
+    ConfigName = "default",
+    LoadConfig = ""
 }
 
 game:GetService("StarterGui"):SetCore("SendNotification", {
     Title = "Jumper",
-    Text = "Script loaded",
+    Text = "getgenv loaded",
     Duration = 3
 })
 
 local cfg = getgenv().JumperConfig
+
+local HttpService = game:GetService("HttpService")
+
+local function saveConfig()
+    if not cfg.SaveCurrentConfig then return end
+    if cfg.ConfigName == "" then
+        warn("Config name cannot be empty")
+        return
+    end
+    
+    local configData = {}
+    for key, value in pairs(cfg) do
+        if key ~= "SaveCurrentConfig" and key ~= "LoadConfig" and key ~= "ConfigName" then
+            if typeof(value) == "Color3" then
+                configData[key] = {value.R, value.G, value.B}
+            else
+                configData[key] = value
+            end
+        end
+    end
+    
+    local fileName = cfg.ConfigName .. ".cfg"
+    local success, err = pcall(function()
+        if not isfolder("JumperConfigs") then
+            makefolder("JumperConfigs")
+        end
+        if isfile("JumperConfigs/" .. fileName) then
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Jumper Config",
+                Text = "Config already exists!",
+                Duration = 3
+            })
+            return
+        end
+        writefile("JumperConfigs/" .. fileName, HttpService:JSONEncode(configData))
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Jumper Config",
+            Text = "Config saved: " .. cfg.ConfigName,
+            Duration = 3
+        })
+    end)
+    
+    if not success then
+        warn("Failed to save config: " .. tostring(err))
+    end
+    
+    cfg.SaveCurrentConfig = false
+end
+
+local function loadConfig()
+    if cfg.LoadConfig == "" then return end
+    
+    local fileName = cfg.LoadConfig .. ".cfg"
+    local success, err = pcall(function()
+        if not isfile("JumperConfigs/" .. fileName) then
+            game:GetService("StarterGui"):SetCore("SendNotification", {
+                Title = "Jumper Config",
+                Text = "Config not found!",
+                Duration = 3
+            })
+            return
+        end
+        
+        local configData = HttpService:JSONDecode(readfile("JumperConfigs/" .. fileName))
+        for key, value in pairs(configData) do
+            if key == "OrbitColor" and type(value) == "table" then
+                cfg[key] = Color3.new(value[1], value[2], value[3])
+            else
+                cfg[key] = value
+            end
+        end
+        
+        game:GetService("StarterGui"):SetCore("SendNotification", {
+            Title = "Jumper Config",
+            Text = "Config loaded: " .. cfg.LoadConfig,
+            Duration = 3
+        })
+    end)
+    
+    if not success then
+        warn("Failed to load config: " .. tostring(err))
+    end
+    
+    cfg.LoadConfig = ""
+end
+
+if cfg.LoadConfig ~= "" then
+    loadConfig()
+end
+
+task.spawn(function()
+    while true do
+        if cfg.SaveCurrentConfig then
+            saveConfig()
+        end
+        task.wait(0.5)
+    end
+end)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -303,11 +407,17 @@ RunService.Heartbeat:Connect(function()
                         
                         if cfg.HoldUntilAnimEnds then
                             task.spawn(function()
-                                CombatRemote:FireServer("Block", true)
+                                local wasBlocking = false
                                 while isPunishing and currentPunishTrack and currentPunishTrack.IsPlaying and currentPunishTarget == abilityTarget do
+                                    if not wasBlocking then
+                                        CombatRemote:FireServer("Block", true)
+                                        wasBlocking = true
+                                    end
                                     task.wait()
                                 end
-                                CombatRemote:FireServer("Block", false)
+                                if wasBlocking then
+                                    CombatRemote:FireServer("Block", false)
+                                end
                                 if isPunishing and currentPunishTarget == abilityTarget then
                                     for i = 1, cfg.AutoPunishHits do
                                         CombatRemote:FireServer("M1", true)
@@ -385,6 +495,59 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
+local orbitPart = nil
+
+local function createOrbit()
+    if orbitPart then
+        orbitPart:Destroy()
+        orbitPart = nil
+    end
+    
+    if not cfg.ShowOrbit then return end
+    
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    
+    orbitPart = Instance.new("Part")
+    orbitPart.Name = "OrbitIndicator"
+    orbitPart.Shape = Enum.PartType.Ball
+    orbitPart.Material = Enum.Material.ForceField
+    orbitPart.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
+    orbitPart.Color = cfg.OrbitColor
+    orbitPart.Transparency = cfg.OrbitTransparency
+    orbitPart.CanCollide = false
+    orbitPart.Anchored = true
+    orbitPart.CFrame = hrp.CFrame
+    orbitPart.Parent = workspace
+end
+
+RunService.RenderStepped:Connect(function()
+    if cfg.ShowOrbit then
+        local char = LocalPlayer.Character
+        if char then
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                if not orbitPart or not orbitPart.Parent then
+                    createOrbit()
+                end
+                if orbitPart then
+                    orbitPart.CFrame = hrp.CFrame
+                    orbitPart.Size = Vector3.new(cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2, cfg.AutoBlockRange * 2)
+                    orbitPart.Color = cfg.OrbitColor
+                    orbitPart.Transparency = cfg.OrbitTransparency
+                end
+            end
+        end
+    else
+        if orbitPart then
+            orbitPart:Destroy()
+            orbitPart = nil
+        end
+    end
+end)
+
 local connections = {}
 local currentAnim = nil
 local bodyParts = {
@@ -449,6 +612,11 @@ LocalPlayer.CharacterAdded:Connect(function(character)
     character:WaitForChild("HumanoidRootPart")
     cleanup()
     setupInvisibility(character)
+    if orbitPart then
+        orbitPart:Destroy()
+        orbitPart = nil
+    end
+    createOrbit()
 end)
 
 if LocalPlayer.Character then
